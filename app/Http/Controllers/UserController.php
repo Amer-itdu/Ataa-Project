@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Http\Requests\SignUpRequest;
 use App\Http\Requests\SignInRequest;
+use App\Http\Requests\UpdateProfileRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -190,5 +191,34 @@ public function signIn(SignInRequest $request)
             'user' => $request->user(),
         ], 200);
     }
+
+
+    public function updateProfile(UpdateProfileRequest $request)
+{
+    $user = $request->user();
+
+    // تحديث الحقول المسموح بها فقط
+    $data = $request->only([
+        'first_name',
+        'last_name',
+        'email',
+        'phone',
+        'address',
+    ]);
+
+    // إذا فيه باسورد جديد
+    if ($request->filled('password')) {
+        $data['password'] = bcrypt($request->password);
+    }
+
+    $user->update($data);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Profile updated successfully',
+        'user' => $user,
+    ], 200);
+}
+
 }
 
