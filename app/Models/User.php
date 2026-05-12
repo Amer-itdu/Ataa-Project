@@ -78,4 +78,10 @@ class User extends Authenticatable
     {
         return $this->role === 'user';
     }
+
+
+    public function requests()
+    {
+        return $this->hasMany(RequestModel::class);
+    }
 }
