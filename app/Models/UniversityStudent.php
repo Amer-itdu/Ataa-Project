@@ -17,6 +17,11 @@ class UniversityStudent extends Model
 
     public function request()
     {
-        return $this->belongsTo(RequestModel::class);
+        return $this->belongsTo(RequestModel::class, 'request_id');
+    }
+
+    public function donations()
+    {
+        return $this->morphMany(Donation::class, 'donationable');
     }
 }

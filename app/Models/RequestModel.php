@@ -16,7 +16,6 @@ class RequestModel extends Model
         'description',
     ];
 
-
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -28,23 +27,22 @@ class RequestModel extends Model
     }
 
     public function patient()
-{
-    return $this->hasOne(Patient::class);
-}
+    {
+        return $this->hasOne(Patient::class, 'request_id');
+    }
 
     public function orphan()
     {
-        return $this->hasOne(Orphan::class);
+        return $this->hasOne(Orphan::class, 'request_id');
     }
+
     public function schoolStudent()
-{
-    return $this->hasOne(SchoolStudent::class);
-}
-public function universityStudent()
-{
-    return $this->hasOne(UniversityStudent::class);
-}
+    {
+        return $this->hasOne(SchoolStudent::class, 'request_id');
+    }
 
+    public function universityStudent()
+    {
+        return $this->hasOne(UniversityStudent::class, 'request_id');
+    }
 }
-
-

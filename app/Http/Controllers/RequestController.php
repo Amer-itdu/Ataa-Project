@@ -63,139 +63,138 @@ class RequestController extends Controller
             'patient'     => $patient,
         ], 201);
     }
-public function storeOrphanRequest(StoreOrphanRequest $request)
-{
-    // 1) ابحث عن المستفيد أو أنشئه
-    $beneficiary = Beneficiary::firstOrCreate(
-        [
-            'full_name'   => $request->full_name,
-            'mother_name' => $request->mother_name,
-        ],
-        [
-            'address' => $request->address,
-            'email'   => $request->email,
-            'phone'   => $request->phone,
-        ]
-    );
+    public function storeOrphanRequest(StoreOrphanRequest $request)
+    {
+        // 1) ابحث عن المستفيد أو أنشئه
+        $beneficiary = Beneficiary::firstOrCreate(
+            [
+                'full_name'   => $request->full_name,
+                'mother_name' => $request->mother_name,
+            ],
+            [
+                'address' => $request->address,
+                'email'   => $request->email,
+                'phone'   => $request->phone,
+            ]
+        );
 
-    // 2) إنشاء الطلب الأساسي
-    $requestModel = RequestModel::create([
-        'user_id'        => Auth::id(),
-        'beneficiary_id' => $beneficiary->id,
-        'request_type'   => 'orphan',
-        'status'         => 'pending',
-        'description'    => $request->description,
-    ]);
+        // 2) إنشاء الطلب الأساسي
+        $requestModel = RequestModel::create([
+            'user_id'        => Auth::id(),
+            'beneficiary_id' => $beneficiary->id,
+            'request_type'   => 'orphan',
+            'status'         => 'pending',
+            'description'    => $request->description,
+        ]);
 
-    // 3) رفع الملفات
-    $familyBookletPath = $request->file('family_booklet')
-        ->store('family_booklets', 'public');
+        // 3) رفع الملفات
+        $familyBookletPath = $request->file('family_booklet')
+            ->store('family_booklets', 'public');
 
-    $deathCertificatePath = $request->file('father_death_certificate')
-        ->store('death_certificates', 'public');
+        $deathCertificatePath = $request->file('father_death_certificate')
+            ->store('death_certificates', 'public');
 
-    // 4) إنشاء سجل اليتيم وربطه بالطلب
-    $orphan = Orphan::create([
-        'request_id'             => $requestModel->id,
-        'family_booklet'         => $familyBookletPath,
-        'father_death_certificate' => $deathCertificatePath,
-    ]);
+        // 4) إنشاء سجل اليتيم وربطه بالطلب
+        $orphan = Orphan::create([
+            'request_id'             => $requestModel->id,
+            'family_booklet'         => $familyBookletPath,
+            'father_death_certificate' => $deathCertificatePath,
+        ]);
 
-    return response()->json([
-        'message'     => 'Orphan request created successfully',
-        'beneficiary' => $beneficiary,
-        'request'     => $requestModel,
-        'orphan'      => $orphan,
-    ], 201);
-}
-
-public function storeSchoolRequest(StoreSchoolRequest $request)
-{
-    // 1) ابحث عن المستفيد أو أنشئه
-    $beneficiary = Beneficiary::firstOrCreate(
-        [
-            'full_name'   => $request->full_name,
-            'mother_name' => $request->mother_name,
-        ],
-        [
-            'address' => $request->address,
-            'email'   => $request->email,
-            'phone'   => $request->phone,
-        ]
-    );
-
-    // 2) إنشاء الطلب الأساسي
-    $requestModel = RequestModel::create([
-        'user_id'        => Auth::id(),
-        'beneficiary_id' => $beneficiary->id,
-        'request_type'   => 'school',
-        'status'         => 'pending',
-        'description'    => $request->description,
-    ]);
-
-    // 3) رفع الملفات
-    $familyBookPhotoPath = $request->file('family_book_photo')
-        ->store('family_book_photos', 'public');
-
-    // 4) إنشاء سجل الطالب المدرسي وربطه بالطلب
-    $school = SchoolStudent::create([
-        'request_id'      => $requestModel->id,
-        'academic_grade'  => $request->academic_grade,
-        'school_name'     => $request->school_name,
-        'family_book_photo' => $familyBookPhotoPath,
-    ]);
-
-    return response()->json([
-        'message'     => 'School student request created successfully',
-        'beneficiary' => $beneficiary,
-        'request'     => $requestModel,
-        'school'      => $school,
-    ], 201);
-}
-
-
-public function storeUniversityRequest(StoreUniversityRequest $request)
-{
-    // 1) ابحث عن المستفيد أو أنشئه
-    $beneficiary = Beneficiary::firstOrCreate(
-        [
-            'full_name'   => $request->full_name,
-            'mother_name' => $request->mother_name,
-        ],
-        [
-            'address' => $request->address,
-            'email'   => $request->email,
-            'phone'   => $request->phone,
-        ]
-    );
-
-    // 2) إنشاء الطلب الأساسي
-    $requestModel = RequestModel::create([
-        'user_id'        => Auth::id(),
-        'beneficiary_id' => $beneficiary->id,
-        'request_type'   => 'university',
-        'status'         => 'pending',
-        'description'    => $request->description,
-    ]);
-
-    // 3) رفع صورة بطاقة الجامعة
-    $universityIdPath = $request->file('university_id_photo')
-        ->store('university_id_photos', 'public');
-
-    // 4) إنشاء سجل الطالب الجامعي وربطه بالطلب
-    $universityStudent = UniversityStudent::create([
-        'request_id'          => $requestModel->id,
-        'academic_year'       => $request->academic_year,
-        'university_id_photo' => $universityIdPath,
-        'support_type'        => $request->support_type,
-    ]);
-
-    return response()->json([
-        'message'           => 'University student request created successfully',
-        'beneficiary'       => $beneficiary,
-        'request'           => $requestModel,
-        'universityStudent' => $universityStudent,
-    ], 201);
-}
-
+        return response()->json([
+            'message'     => 'Orphan request created successfully',
+            'beneficiary' => $beneficiary,
+            'request'     => $requestModel,
+            'orphan'      => $orphan,
+        ], 201);
     }
+
+    public function storeSchoolRequest(StoreSchoolRequest $request)
+    {
+        // 1) ابحث عن المستفيد أو أنشئه
+        $beneficiary = Beneficiary::firstOrCreate(
+            [
+                'full_name'   => $request->full_name,
+                'mother_name' => $request->mother_name,
+            ],
+            [
+                'address' => $request->address,
+                'email'   => $request->email,
+                'phone'   => $request->phone,
+            ]
+        );
+
+        // 2) إنشاء الطلب الأساسي
+        $requestModel = RequestModel::create([
+            'user_id'        => Auth::id(),
+            'beneficiary_id' => $beneficiary->id,
+            'request_type'   => 'school',
+            'status'         => 'pending',
+            'description'    => $request->description,
+        ]);
+
+        // 3) رفع الملفات
+        $familyBookPhotoPath = $request->file('family_book_photo')
+            ->store('family_book_photos', 'public');
+
+        // 4) إنشاء سجل الطالب المدرسي وربطه بالطلب
+        $school = SchoolStudent::create([
+            'request_id'      => $requestModel->id,
+            'academic_grade'  => $request->academic_grade,
+            'school_name'     => $request->school_name,
+            'family_book_photo' => $familyBookPhotoPath,
+        ]);
+
+        return response()->json([
+            'message'     => 'School student request created successfully',
+            'beneficiary' => $beneficiary,
+            'request'     => $requestModel,
+            'school'      => $school,
+        ], 201);
+    }
+
+
+    public function storeUniversityRequest(StoreUniversityRequest $request)
+    {
+        // 1) ابحث عن المستفيد أو أنشئه
+        $beneficiary = Beneficiary::firstOrCreate(
+            [
+                'full_name'   => $request->full_name,
+                'mother_name' => $request->mother_name,
+            ],
+            [
+                'address' => $request->address,
+                'email'   => $request->email,
+                'phone'   => $request->phone,
+            ]
+        );
+
+        // 2) إنشاء الطلب الأساسي
+        $requestModel = RequestModel::create([
+            'user_id'        => Auth::id(),
+            'beneficiary_id' => $beneficiary->id,
+            'request_type'   => 'university',
+            'status'         => 'pending',
+            'description'    => $request->description,
+        ]);
+
+        // 3) رفع صورة بطاقة الجامعة
+        $universityIdPath = $request->file('university_id_photo')
+            ->store('university_id_photos', 'public');
+
+        // 4) إنشاء سجل الطالب الجامعي وربطه بالطلب
+        $universityStudent = UniversityStudent::create([
+            'request_id'          => $requestModel->id,
+            'academic_year'       => $request->academic_year,
+            'university_id_photo' => $universityIdPath,
+            'support_type'        => $request->support_type,
+        ]);
+
+        return response()->json([
+            'message'           => 'University student request created successfully',
+            'beneficiary'       => $beneficiary,
+            'request'           => $requestModel,
+            'universityStudent' => $universityStudent,
+        ], 201);
+    }
+}

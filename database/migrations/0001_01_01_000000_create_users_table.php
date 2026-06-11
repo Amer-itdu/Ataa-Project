@@ -6,25 +6,37 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
+
+            // معلومات المستخدم الأساسية
             $table->string('first_name');
             $table->string('last_name');
             $table->date('date_of_birth')->nullable();
-           $table->string('email')->nullable()->unique();
+
+            // تسجيل الدخول
+            $table->string('email')->nullable()->unique();
             $table->string('phone')->nullable()->unique();
             $table->string('password');
+
+            // بيانات إضافية
             $table->string('address')->nullable();
-            $table->string('profile_image');
+            $table->string('profile_image')->nullable();
             $table->string('national_id')->nullable();
             $table->string('international_passport')->nullable();
-            $table->enum('role', ['admin', 'sub_admin', 'user'])->default('user');
-            $table->integer('account_balance')->default(0);
+
+            // صلاحيات النظام 
+            $table->enum('role', ['admin', 'sub_admin', 'field_worker', 'user'])->default('user');
+            // نوع المستخدم
+            $table->enum('user_category', ['public', 'beneficiary'])->default('public');
+
+            $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
+            // 🔥 محفظة متعددة العملات (JSON → LONGTEXT في MariaDB)
+
+            $table->json('balances')->nullable();
+            // Laravel defaults
             $table->timestamp('email_verified_at')->nullable();
             $table->rememberToken();
             $table->timestamps();
@@ -46,13 +58,10 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('users');
     }
 };

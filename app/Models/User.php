@@ -2,22 +2,15 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Donor;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens;
+    use HasApiTokens, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'first_name',
         'last_name',
@@ -28,60 +21,99 @@ class User extends Authenticatable
         'profile_image',
         'national_id',
         'international_passport',
-        'account_balance',
+        'balances',
         'address',
+        'role',
+        'user_category',
+        'status',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+        'balances' => 'array',
+    ];
+
+    // ================================
+    // 🔥 نظام الرصيد متعدد العملات
+    // ================================
+
+    private function normalizeBalances()
+    {
+        $balances = $this->balances;
+
+        // NULL أو فارغ
+        if (empty($balances)) {
+            return [];
+        }
+
+        // إذا كانت JSON string
+        if (is_string($balances)) {
+            $decoded = json_decode($balances, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        // إذا كانت Array
+        return is_array($balances) ? $balances : [];
+    }
+
+    public function getBalance($currency)
+    {
+        $balances = $this->normalizeBalances();
+        return $balances[$currency] ?? 0;
+    }
+
+    public function addBalance($currency, $amount)
+    {
+        $balances = $this->normalizeBalances();
+
+        $balances[$currency] = ($balances[$currency] ?? 0) + $amount;
+
+        $this->balances = $balances;
+        $this->save();
+    }
+
+    public function subtractBalance($currency, $amount)
+    {
+        $balances = $this->normalizeBalances();
+
+        if (($balances[$currency] ?? 0) < $amount) {
+            return false;
+        }
+
+        $balances[$currency] -= $amount;
+
+        $this->balances = $balances;
+        $this->save();
+
+        return true;
+    }
+
+    public function donor()
+    {
+        return $this->hasOne(Donor::class);
+    }
+
+    public static function currencyRates()
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'USD' => 1,
+            'EUR' => 1.07,
+            'SAR' => 0.27,
+            'AED' => 0.27,
+            'EGP' => 0.020,
+            'SYP' => 0.00040,
         ];
     }
 
-    /**
-     * Check if user is admin.
-     */
-    public function isAdmin(): bool
+    public static function convertToUSD($amount, $currency)
     {
-        return $this->role === 'admin';
-    }
-
-    /**
-     * Check if user is sub_admin.
-     */
-    public function isSubAdmin(): bool
-    {
-        return $this->role === 'sub_admin';
-    }
-
-    /**
-     * Check if user is regular user.
-     */
-    public function isUser(): bool
-    {
-        return $this->role === 'user';
-    }
-
-
-    public function requests()
-    {
-        return $this->hasMany(RequestModel::class);
+        $rates = self::currencyRates();
+        return $amount * ($rates[$currency] ?? 1);
     }
 }
