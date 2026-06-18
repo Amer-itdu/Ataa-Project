@@ -14,6 +14,10 @@ class RequestModel extends Model
         'request_type',
         'status',
         'description',
+        'personal_picture',
+        'required_amount',
+        'status_request',
+        'title',
     ];
 
     public function user()

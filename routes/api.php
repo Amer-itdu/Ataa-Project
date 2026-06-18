@@ -56,9 +56,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('storeorphan', [RequestController::class, 'storeOrphanRequest']);
         Route::post('storeschool', [RequestController::class, 'storeSchoolRequest']);
         Route::post('storeuniversity', [RequestController::class, 'storeUniversityRequest']);
+        Route::get('getpendingrequests', [RequestController::class, 'getPendingRequests']);
+        Route::get('getpendingpatients', [RequestController::class, 'getPendingPatients']);
+        Route::get('getpendingorphans', [RequestController::class, 'getPendingOrphans']);
+        Route::get('getpendingschools', [RequestController::class, 'getPendingSchool']);
+        Route::get('getpendinguniversities', [RequestController::class, 'getPendingUniversity']);
+        Route::get('getopenacceptedrequests', [RequestController::class, 'getOpenAcceptedRequests']);
+        Route::get('getopenacceptedpatients', [RequestController::class, 'getOpenAcceptedPatients']);
+        Route::get('getopenacceptedorphans', [RequestController::class, 'getOpenAcceptedOrphans']);
+        Route::get('getopenacceptedschools', [RequestController::class, 'getOpenAcceptedSchoolStudents']);
+        Route::get('getopenaccepteduniversities', [RequestController::class, 'getOpenAcceptedUniversityStudents']);
+        Route::put('closeRequest/{id}', [RequestController::class, 'closeRequest']);
+        Route::put('acceptRequest/{id}', [RequestController::class, 'acceptRequest']);
     });
 
-    
+
 
 
     Route::get('/check', function () {
@@ -96,8 +108,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
 // Donation routes
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/quickDonate', [DonationController::class, 'quickDonateToAssociation']);
-    Route::post('/approveDonation/{id}', [DonationController::class, 'approveDonation']);
-    Route::post('/rejectDonation/{id}', [DonationController::class, 'rejectDonation']);
-    Route::get('/pendingDonations', [DonationController::class, 'getPendingDonations']);
     Route::post('/donate', [DonationController::class, 'donate']);
+    Route::get('/mydonations', [DonationController::class, 'myDonationsSummary']);
 });

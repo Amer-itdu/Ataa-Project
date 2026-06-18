@@ -14,10 +14,10 @@ class DonateRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'currency' => 'required|in:USD,EUR,SAR,AED,EGP,SYP',
+            'id'     => 'required|integer|gt:0',
+            'donationable_type'   => 'required|in:request,campaign',
             'amount' => 'required|numeric|min:1',
-            'type' => 'required|in:campaign,request',
-            'id' => 'required|integer|gt:0',
+            'currency' => 'required|in:USD,EUR,SAR,AED,EGP,SYP',
         ];
     }
 
@@ -29,14 +29,9 @@ class DonateRequest extends FormRequest
 
             'amount.required' => 'Donation amount is required.',
             'amount.numeric' => 'The donation amount must be a numeric value.',
-            'amount.min' => 'The minimum donation amount is 1.',
-
-            'type.required' => 'Donation type is required.',
-            'type.in' => 'Donation type must be either campaign or request.',
-
-            'id.required' => 'Target ID is required.',
-            'id.integer' => 'Target ID must be a valid integer.',
-            'id.gt' => 'Target ID must be greater than zero.',
+            'amount.min' => 'The minimum donation amount is 1.',    
+            'donationable_type.required' => 'Donation type is required.',
+            'donationable_type.in' => 'Donation type must be either "request" or "campaign".',
         ];
     }
 }

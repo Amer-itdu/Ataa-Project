@@ -14,246 +14,332 @@ use Illuminate\Support\Facades\DB;
 
 class DonationController extends Controller
 {
-public function quickDonateToAssociation(Request $request)
-{
-    /** @var User|null $user */
-    $user = Auth::user();
 
-    if (!$user) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Authentication required.'
-        ], 401);
-    }
+    public function quickDonateToAssociation(Request $request)
+    {
+        /** @var User|null $user */
+        $user = Auth::user();
 
-    if ($user->role === 'admin') {
-        return response()->json([
-            'success' => false,
-            'message' => 'Admins cannot donate.'
-        ], 403);
-    }
-
-    $validated = $request->validate([
-        'currency' => 'required|in:USD,EUR,SAR,AED,EGP,SYP',
-        'amount' => 'required|numeric|min:1',
-    ]);
-
-    $amountInUSD = User::convertToUSD($validated['amount'], $validated['currency']);
-
-    $admin = User::where('role', 'admin')->first();
-
-    if (!$admin) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Admin account not found.'
-        ], 500);
-    }
-
-    // 🔥 لا تخصم ولا تضيف رصيد الآن
-    $donor = $user->donor ?? Donor::create([
-        'user_id' => $user->id,
-        'anonymous' => false,
-    ]);
-
-    $donation = Donation::create([
-        'donor_id' => $donor->id,
-        'amount' => $amountInUSD,
-        'currency' => 'USD',
-        'original_amount' => $validated['amount'],
-        'original_currency' => $validated['currency'],
-        'donationable_type' => User::class,
-        'donationable_id' => $admin->id,
-        'status' => 'pending', // NEW
-    ]);
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Donation submitted and awaiting admin approval.',
-        'donation_id' => $donation->id,
-    ], 200);
-}
-public function approveDonation($id)
-{
-    $admin = Auth::user();
-
-    if (!$admin) {
-        return response()->json(['message' => 'Authentication required.'], 401);
-    }
-
-    if ($admin->role !== 'admin') {
-        return response()->json(['message' => 'Only admins can approve donations'], 403);
-    }
-
-    $donation = Donation::findOrFail($id);
-
-    if ($donation->status !== 'pending') {
-        return response()->json(['message' => 'Donation already processed'], 400);
-    }
-
-    // المتبرع الحقيقي
-    /** @var \App\Models\User $donorUser */
-    $donorUser = $donation->donor->user;
-
-    // تحقق من رصيد المتبرع
-    if (!$donorUser->subtractBalance($donation->original_currency, $donation->original_amount)) {
-        return response()->json(['message' => 'User does not have enough balance'], 400);
-    }
-
-    // ================================
-    // 🔥 تحديد المستفيد حسب نوع التبرع
-    // ================================
-
-    $target = $donation->donationable;
-
-        if ($donation->donationable_type === \App\Models\Campaign::class) {
-
-        // تبرع لحملة → المصاري للجمعية
-        /** @var \App\Models\User $receiver */
-        $receiver = User::where('role', 'admin')->first();
-
-    } else {
-
-        // تبرع لحالة → المصاري لصاحب الحالة
-        // Orphan / Patient / SchoolStudent / UniversityStudent
-        /** @var \App\Models\User $receiver */
-        $receiver = $target->request->user;
-    }
-
-    // إضافة الرصيد للمستفيد بالدولار
-    $receiver->addBalance('USD', $donation->amount);
-
-    // تحديث حالة التبرع
-    $donation->update(['status' => 'approved']);
-
-    return response()->json(['message' => 'Donation approved successfully']);
-}
-public function rejectDonation($id)
-{
-    $admin = Auth::user();
-
-    if (!$admin) {
-        return response()->json(['message' => 'Authentication required.'], 401);
-    }
-
-    if ($admin->role !== 'admin') {
-        return response()->json(['message' => 'Only admins can reject donations'], 403);
-    }
-
-    $donation = Donation::findOrFail($id);
-
-    if ($donation->status !== 'pending') {
-        return response()->json(['message' => 'Donation already processed'], 400);
-    }
-
-    $donation->update(['status' => 'rejected']);
-
-    return response()->json(['message' => 'Donation rejected successfully']);
-}
-public function getPendingDonations()
-{
-    $admin = Auth::user();
-
-    if ($admin->role !== 'admin') {
-        return response()->json([
-            'success' => false,
-            'message' => 'Only admins can view pending donations.'
-        ], 403);
-    }
-
-    $pending = Donation::where('status', 'pending')
-        ->with(['donor.user']) // يجلب معلومات المتبرع
-        ->orderBy('created_at', 'desc')
-        ->get();
-
-    return response()->json([
-        'success' => true,
-        'pending_donations' => $pending
-    ]);
-}
-public function donate(DonateRequest $request)
-{
-    $user = Auth::user();
-
-    if (!$user) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Authentication required.'
-        ], 401);
-    }
-
-    // منع الأدمن من التبرع
-    if ($user->role === 'admin') {
-        return response()->json([
-            'success' => false,
-            'message' => 'Admins cannot donate.'
-        ], 403);
-    }
-
-    $validated = $request->validated();
-
-    // تحويل العملة إلى دولار
-    $amountInUSD = User::convertToUSD($validated['amount'], $validated['currency']);
-
-    // ================================
-    // 🔥 تحديد الهدف
-    // ================================
-
-    if ($validated['type'] === 'campaign') {
-
-        // التبرع لحملة
-        $target = Campaign::findOrFail($validated['id']);
-        $owner = $target->user; // صاحب الحملة
-
-    } else {
-
-        // التبرع لحالة (يتيم أو مريض)
-        $requestModel = RequestModel::findOrFail($validated['id']);
-
-        $target = match ($requestModel->request_type) {
-            'patient' => $requestModel->patient,
-            'orphan'  => $requestModel->orphan,
-            default   => null
-        };
-
-        if (!$target) {
+        if (!$user) {
             return response()->json([
                 'success' => false,
-                'message' => 'This request type does not support donations.'
+                'message' => 'Authentication required.'
+            ], 401);
+        }
+
+        if ($user->role === 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Admins cannot donate.'
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'currency' => 'required|in:USD,EUR,SAR,AED,EGP,SYP',
+            'amount' => 'required|numeric|min:1',
+        ]);
+
+        // تحويل المبلغ إلى دولار
+        $amountInUSD = User::convertToUSD($validated['amount'], $validated['currency']);
+
+        // جلب حساب الجمعية (الأدمن)
+        $admin = User::where('role', 'admin')->first();
+
+        if (!$admin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Admin account not found.'
+            ], 500);
+        }
+
+        // خصم رصيد المتبرع
+        if (!$user->subtractBalance($validated['currency'], $validated['amount'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Insufficient balance.'
             ], 400);
         }
 
-        /** @var \App\Models\User $owner */
-        $owner = $requestModel->user; // صاحب الحالة
+        // إضافة الرصيد للجمعية بالدولار
+        $admin->addBalance('USD', $amountInUSD);
+
+        // إنشاء donor إذا غير موجود
+        $donor = $user->donor ?? Donor::create([
+            'user_id' => $user->id,
+            'anonymous' => false,
+        ]);
+
+        // تسجيل التبرع
+        $donation = Donation::create([
+            'donor_id'          => $donor->id,
+            'amount'            => $amountInUSD,
+            'currency'          => 'USD',
+            'original_amount'   => $validated['amount'],
+            'original_currency' => $validated['currency'],
+            'donationable_type' => User::class,
+            'donationable_id'   => $admin->id,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Donation completed successfully.',
+            'donation_id' => $donation->id,
+        ], 200);
     }
 
-    // إنشاء donor إذا غير موجود
-    $donor = $user->donor ?? Donor::create([
-        'user_id' => $user->id,
-        'anonymous' => false,
-    ]);
 
-    // إنشاء التبرع مباشرة كـ approved
-    $donation = Donation::create([
-        'donor_id' => $donor->id,
-        'amount' => $amountInUSD,
-        'currency' => 'USD',
-        'original_amount' => $validated['amount'],
-        'original_currency' => $validated['currency'],
-        'donationable_type' => get_class($target),
-        'donationable_id' => $target->id,
-        'status' => 'approved', // 🔥 مباشرة بدون موافقة أدمن
-    ]);
+    // ================================
+    public function donate(DonateRequest $request)
+    {
+        $user = User::find(Auth::id());
 
-    // 🔥 إضافة الرصيد لصاحب الحملة أو صاحب الحالة
-    /** @var \App\Models\User $owner */
-    $owner->addBalance('USD', $amountInUSD);
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Authentication required.'], 401);
+        }
 
-    return response()->json([
-        'success' => true,
-        'message' => 'Donation completed successfully.',
-        'donation_id' => $donation->id
-    ]);
-}
+        if ($user->role === 'admin') {
+            return response()->json(['success' => false, 'message' => 'Admins cannot donate.'], 403);
+        }
 
+        $validated = $request->validated();
+        $amountInUSD = User::convertToUSD($validated['amount'], $validated['currency']);
 
+        // خصم الرصيد أولاً
+        if (!$user->subtractBalance($validated['currency'], $validated['amount'])) {
+            return response()->json(['success' => false, 'message' => 'Insufficient balance.'], 400);
+        }
+
+        return $validated['donationable_type'] === 'campaign'
+            ? $this->donateToCampaign($user, $validated, $amountInUSD)
+            : $this->donateToRequest($user, $validated, $amountInUSD);
+    }
+    private function donateToRequest($user, $validated, $amountInUSD)
+    {
+        $requestModel = RequestModel::findOrFail($validated['id']);
+
+        $target = match ($requestModel->request_type) {
+            'patient'    => $requestModel->patient,
+            'orphan'     => $requestModel->orphan,
+            'school'     => $requestModel->schoolStudent,
+            'university' => $requestModel->universityStudent,
+            default      => null,
+        };
+
+        if (!$target) {
+            $user->addBalance($validated['currency'], $validated['amount']);
+            return response()->json(['success' => false, 'message' => 'Invalid request type.'], 400);
+        }
+
+        $donatedBefore = $target->donations()->sum('amount');
+        $remaining     = $requestModel->required_amount - $donatedBefore;
+        $amountToUse   = min($amountInUSD, $remaining);
+        $extra         = $amountInUSD - $amountToUse;
+
+        // إضافة رصيد لصاحب الحالة
+        $requestModel->user->addBalance('USD', $amountToUse);
+
+        // إرجاع الزيادة
+        if ($extra > 0) {
+            $user->addBalance('USD', $extra);
+        }
+
+        // إنشاء donor إن لم يكن موجوداً
+        $donor = $user->getOrCreateDonor();
+
+        $donation = $target->donations()->create([
+            'donor_id'          => $donor->id,
+            'amount'            => $amountToUse,
+            'currency'          => 'USD',
+            'original_amount'   => $validated['amount'],
+            'original_currency' => $validated['currency'],
+        ]);
+
+        $donated  = $target->donations()->sum('amount');
+        $required = $requestModel->required_amount;
+
+        if ($donated >= $required) {
+            $requestModel->update(['status_request' => 'closed']);
+        }
+
+        return response()->json([
+            'success'                     => true,
+            'message'                     => 'Donation completed successfully.',
+            'donation_id'                 => $donation->id,
+            'donated_amount'              => $donated,
+            'required_amount'             => $required,
+            'progress_percentage'         => $required > 0 ? round(($donated / $required) * 100, 2) : 0,
+            'extra_returned_to_donor_usd' => $extra,
+        ]);
+    }
+    private function donateToCampaign($user, $validated, $amountInUSD)
+    {
+        $campaign = Campaign::findOrFail($validated['id']);
+
+        // السماح بالتبرع فقط إذا كانت الحملة مفتوحة أو اكتمل التطوع فقط
+        if (!in_array($campaign->status, ['open', 'completed_volunteers'])) {
+            $user->addBalance($validated['currency'], $validated['amount']);
+            return response()->json([
+                'success' => false,
+                'message' => 'Campaign is not active for donations.'
+            ], 400);
+        }
+
+        $remaining   = $campaign->amount_needed - $campaign->amount_collected;
+        $amountToUse = min($amountInUSD, $remaining);
+        $extra       = $amountInUSD - $amountToUse;
+
+        // إرجاع الزيادة للمتبرع
+        if ($extra > 0) {
+            $user->addBalance('USD', $extra);
+        }
+
+        // إنشاء donor إن لم يكن موجوداً
+        $donor = $user->getOrCreateDonor();
+
+        // تسجيل التبرع
+        $donation = $campaign->donations()->create([
+            'donor_id'          => $donor->id,
+            'amount'            => $amountToUse,
+            'currency'          => 'USD',
+            'original_amount'   => $validated['amount'],
+            'original_currency' => $validated['currency'],
+        ]);
+
+        // تحديث المبلغ المجموع
+        $campaign->increment('amount_collected', $amountToUse);
+        $campaign->refresh();
+
+        // فحص اكتمال الحملة (تبرعات + متطوعين)
+        $this->checkCampaignCompletion($campaign);
+
+        return response()->json([
+            'success'                     => true,
+            'message'                     => 'Donation to campaign completed successfully.',
+            'donation_id'                 => $donation->id,
+            'donated_amount'              => $campaign->amount_collected,
+            'required_amount'             => $campaign->amount_needed,
+            'progress_percentage'         => round(($campaign->amount_collected / $campaign->amount_needed) * 100, 2),
+            'extra_returned_to_donor_usd' => $extra,
+            'campaign_status'             => $campaign->status,
+        ]);
+    }
+
+    private function checkCampaignCompletion(Campaign $campaign)
+    {
+        $donationsDone  = $campaign->amount_collected >= $campaign->amount_needed;
+        $volunteersDone = $campaign->volunteers_joined >= $campaign->volunteers_needed;
+
+        if ($donationsDone && $volunteersDone) {
+            $campaign->update(['status' => 'completed_all']);
+        } elseif ($donationsDone) {
+            $campaign->update(['status' => 'completed_donations']);
+        } elseif ($volunteersDone) {
+            $campaign->update(['status' => 'completed_volunteers']);
+        }
+    }
+    public function myDonationsSummary()
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Authentication required.'
+            ], 401);
+        }
+
+        $donor = $user->donor;
+
+        if (!$donor) {
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'total_donated_usd' => 0,
+                    'total_donations_count' => 0,
+                    'cases_count' => 0,
+                    'campaigns_count' => 0,
+                    'total_supported' => 0,
+                    'cases_by_type' => [],
+                    'cases' => [],
+                    'campaigns' => []
+                ]
+            ]);
+        }
+
+        // جميع التبرعات
+        $donations = $donor->donations()->with('donationable')->get();
+
+        // إجمالي المبلغ
+        $totalDonated = $donations->sum('amount');
+
+        // عدد التبرعات
+        $totalCount = $donations->count();
+
+        // ============================
+        // 🔥 الحالات (Patient / Orphan / SchoolStudent / UniversityStudent)
+        // ============================
+        $cases = $donations->filter(function ($d) {
+            return !($d->donationable instanceof \App\Models\Campaign);
+        })->map(function ($d) {
+            $case = $d->donationable;
+
+            return [
+                'donation_id' => $d->id,
+                'case_id' => $case->id,
+                'type' => class_basename($case), // Patient / Orphan / SchoolStudent / UniversityStudent
+                'amount_usd' => $d->amount,
+                'date' => $d->created_at->format('Y-m-d H:i')
+            ];
+        })->values();
+
+        // عدد الحالات الفريدة
+        $uniqueCasesCount = $cases->pluck('case_id')->unique()->count();
+
+        // ============================
+        // 🔥 عدد الحالات حسب النوع
+        // ============================
+        $casesByType = $cases
+            ->groupBy('type')
+            ->map(function ($group) {
+                return $group->pluck('case_id')->unique()->count();
+            });
+
+        // ============================
+        // 🔥 الحملات
+        // ============================
+        $campaigns = $donations->filter(function ($d) {
+            return $d->donationable instanceof \App\Models\Campaign;
+        })->map(function ($d) {
+            $campaign = $d->donationable;
+
+            return [
+                'donation_id' => $d->id,
+                'campaign_id' => $campaign->id,
+                'title' => $campaign->title,
+                'status' => $campaign->status,
+                'amount_usd' => $d->amount,
+                'date' => $d->created_at->format('Y-m-d H:i')
+            ];
+        })->values();
+
+        // عدد الحملات الفريدة
+        $uniqueCampaignsCount = $campaigns->pluck('campaign_id')->unique()->count();
+
+        // مجموع الحالات + الحملات
+        $totalSupported = $uniqueCasesCount + $uniqueCampaignsCount;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'total_donated_usd' => number_format($totalDonated, 2, '.', ''),
+                'total_donations_count' => $totalCount,
+                'cases_count' => $uniqueCasesCount,
+                'campaigns_count' => $uniqueCampaignsCount,
+                'total_supported' => $totalSupported,
+                'cases_by_type' => $casesByType,
+                'cases' => $cases,
+                'campaigns' => $campaigns
+            ]
+        ]);
+    }
 }

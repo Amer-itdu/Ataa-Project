@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class StoreOrphanRequest extends FormRequest
 {
@@ -12,41 +11,66 @@ class StoreOrphanRequest extends FormRequest
         return true;
     }
 
-   public function rules()
-{
-    return [
-        'full_name' => 'required|string|max:255',
-        'address'   => 'required|string|max:255',
+    public function rules()
+    {
+        $user = $this->user();
+        $isAdmin = $user && $user->role === 'admin';
 
-        'phone' => 'nullable|regex:/^[0-9]+$/',
-        'email' => 'prohibited',
+        return [
 
-        'description' => 'required|string',
-        'required_amount' => 'prohibited',
+            'full_name' => 'required|string|max:255',
+            'address'   => 'required|string|max:255',
 
-        'family_booklet' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120',
-        'father_death_certificate' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120',
-    ];
-}
+            // title فقط للأدمن
+            'title' => $isAdmin
+                ? 'required|string|max:255'
+                : 'prohibited',
+
+            // phone إجباري للجميع
+            'phone' => 'required|regex:/^[0-9]+$/',
+
+            // email ممنوع للجميع
+            'email' => 'prohibited',
+
+            'description' => 'required|string',
+
+            // required_amount فقط للأدمن
+            'required_amount' => $isAdmin
+                ? 'required|numeric|min:1'
+                : 'prohibited',
+
+            // personal_picture فقط للأدمن
+            'personal_picture' => $isAdmin
+                ? 'required|file|mimes:jpg,jpeg,png|max:5120'
+                : 'prohibited',
+
+            'family_booklet' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120',
+            'father_death_certificate' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120',
+        ];
+    }
 
     public function messages(): array
     {
         return [
             'full_name.required' => 'The full name is required.',
-            'full_name.string' => 'The full name must be a string.',
-            'full_name.max' => 'The full name may not be greater than 255 characters.',
             'address.required' => 'The address is required.',
-            'address.string' => 'The address must be a string.',
-            'address.max' => 'The address may not be greater than 255 characters.',
+
+            'title.required' => 'Title is required for admins.',
+            'title.string' => 'Title must be a string.',
+            'title.max' => 'Title must not exceed 255 characters.',
+            'title.prohibited' => 'Regular users cannot set a title.',
+
+            'phone.required' => 'The phone number is required.',
             'phone.regex' => 'The phone format is invalid.',
+
+            'description.required' => 'The description is required.',
+
+            'required_amount.required' => 'The required amount is required for admins.',
+
+            'personal_picture.required' => 'The personal picture is required for admins.',
+
             'family_booklet.required' => 'The family booklet is required.',
-            'family_booklet.file' => 'The family booklet must be a file.',
-            'family_booklet.mimes' => 'The family booklet must be a file of type: jpg, jpeg, png, pdf.',
-            'family_booklet.max' => 'The family booklet may not be greater than 5MB.',
             'father_death_certificate.required' => 'The father death certificate is required.',
-            'father_death_certificate.file' => 'The father death certificate must be a file.',
-            'father_death_certificate.mimes' => 'The father death certificate must be a file of type: jpg, jpeg, png, pdf.',
-            'father_death_certificate.max' => 'The father death certificate may not be greater than 5MB.',
         ];
     }
 }

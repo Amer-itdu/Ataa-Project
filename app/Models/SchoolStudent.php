@@ -13,7 +13,6 @@ class SchoolStudent extends Model
         'academic_grade',
         'school_name',
         'family_book_photo',
-        'required_amount',
     ];
 
     public function request()

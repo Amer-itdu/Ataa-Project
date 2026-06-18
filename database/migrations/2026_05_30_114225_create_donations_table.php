@@ -10,7 +10,6 @@ return new class extends Migration
     {
         Schema::create('donations', function (Blueprint $table) {
             $table->id();
-              $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
 
             // donor_id بدل user_id
             $table->foreignId('donor_id')->constrained()->onDelete('cascade');

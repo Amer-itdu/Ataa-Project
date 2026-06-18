@@ -11,7 +11,6 @@ class Beneficiary extends Model
         'address',
         'email',
         'phone',
-        'personal_picture',
     ];
 
     public function requests()

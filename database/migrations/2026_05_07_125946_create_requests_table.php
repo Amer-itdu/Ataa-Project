@@ -8,23 +8,29 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
-     */ 
+     */
     public function up(): void
     {
-       Schema::create('requests', function (Blueprint $table) {
-    $table->id();
+        Schema::create('requests', function (Blueprint $table) {
+            $table->id();
 
-    $table->foreignId('user_id')->constrained()->onDelete('cascade');
-    $table->foreignId('beneficiary_id')->constrained()->onDelete('cascade');
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->foreignId('beneficiary_id')->constrained()->onDelete('cascade');
 
-    $table->string('request_type'); // patient, orphan, school, university
-    $table->enum('status', ['pending', 'accepted', 'rejected'])->default('pending');
+            $table->string('request_type'); // patient, orphan, school, university
+            $table->enum('status', ['pending', 'accepted', 'rejected'])->default('pending');
 
-    $table->text('description')->nullable();
+            $table->text('description')->nullable();
 
-    $table->timestamps();
-});
+            $table->string('personal_picture')->nullable();
+            $table->decimal('required_amount', 10, 2)->default(0);
+            $table->string('title', 255)->nullable();
+            $table->enum('status_request', ['open', 'closed'])->default('open');
 
+
+
+            $table->timestamps();
+        });
     }
 
     /**

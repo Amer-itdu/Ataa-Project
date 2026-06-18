@@ -14,7 +14,6 @@ class Donation extends Model
         'currency',             // USD دائمًا
         'original_amount',      // المبلغ الأصلي
         'original_currency',    // SAR, AED, SYP, EGP, EUR, USD
-        'status',              // pending, approved, rejected
     ];
 
     protected $casts = [

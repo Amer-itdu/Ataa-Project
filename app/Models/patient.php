@@ -8,10 +8,8 @@ class Patient extends Model
 {
     protected $fillable = [
         'request_id',
-        'required_amount',
         'medical_report',
         'national_id',
-    
     ];
 
     public function request()

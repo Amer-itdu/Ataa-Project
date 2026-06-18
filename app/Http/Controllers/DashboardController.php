@@ -18,8 +18,10 @@ class DashboardController extends Controller
     {
         $totalUsers = User::count();
         $totalCampaigns = Campaign::count();
-        $totalApprovedDonations = Donation::where('status', 'approved')->count();
-        $totalDonatedUsd = Donation::where('status', 'approved')->sum('amount');
+
+        // بعد حذف status من donations
+        $totalApprovedDonations = Donation::count();
+        $totalDonatedUsd = Donation::sum('amount');
 
         $totalPendingRequests = RequestModel::where('status', 'pending')->count();
         $totalAcceptedRequests = RequestModel::where('status', 'accepted')->count();
@@ -47,7 +49,6 @@ class DashboardController extends Controller
         $start = Carbon::now()->subMonths(11)->startOfMonth();
 
         $records = Donation::selectRaw('YEAR(created_at) as year, MONTH(created_at) as month, SUM(amount) as total_amount')
-            ->where('status', 'approved')
             ->where('created_at', '>=', $start)
             ->groupBy('year', 'month')
             ->orderBy('year')
@@ -100,12 +101,11 @@ class DashboardController extends Controller
     }
 
     // ======================================================
-    // 4) recentDonations — آخر 10 تبرعات approved
+    // 4) recentDonations — آخر 10 تبرعات
     // ======================================================
     public function recentDonations()
     {
-        $donations = Donation::where('status', 'approved')
-            ->with(['donor.user', 'donationable'])
+        $donations = Donation::with(['donor.user', 'donationable'])
             ->orderBy('created_at', 'desc')
             ->take(10)
             ->get()

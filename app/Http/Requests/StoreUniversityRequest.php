@@ -12,46 +12,70 @@ class StoreUniversityRequest extends FormRequest
     }
 
     public function rules()
-{
-    return [
-        'full_name' => 'required|string|max:255',
-        'address'   => 'required|string|max:255',
+    {
+        $user = $this->user();
+        $isAdmin = $user && $user->role === 'admin';
 
-        // ممنوع يضيف رقم
-        'phone' => 'prohibited',
+        return [
 
-        // ممنوع يضيف إيميل
-        'email' => 'prohibited',
+            'full_name' => 'required|string|max:255',
+            'address'   => 'required|string|max:255',
 
-        'description' => 'required|string',
+            // title فقط للأدمن
+            'title' => $isAdmin
+                ? 'required|string|max:255'
+                : 'prohibited',
 
-        'academic_year'       => 'required|string|max:255',
-        'support_type'        => 'required|string|in:laptopsupport,tuitionassistance',
-        'university_id_photo' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120',
-        'required_amount'     => 'prohibited',
-    ];
-}
+            // الإدمن يدخل رقم أو إيميل واحد على الأقل
+            // اليوزر ممنوع يدخلهم
+            'email' => $isAdmin
+                ? 'nullable|required_without:phone|email'
+                : 'prohibited',
+
+            'phone' => $isAdmin
+                ? 'nullable|required_without:email|regex:/^[0-9]+$/'
+                : 'prohibited',
+
+            'description' => 'required|string',
+
+            'academic_year'       => 'required|string|max:255',
+            'support_type'        => 'required|string|in:laptopsupport,tuitionassistance',
+            'university_id_photo' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120',
+
+            // required_amount فقط للأدمن
+            'required_amount' => $isAdmin
+                ? 'required|numeric|min:1'
+                : 'prohibited',
+
+            // personal_picture فقط للأدمن
+            'personal_picture' => $isAdmin
+                ? 'required|file|mimes:jpg,jpeg,png|max:5120'
+                : 'prohibited',
+        ];
+    }
+
     public function messages(): array
     {
         return [
             'full_name.required' => 'The full name is required.',
-            'full_name.string' => 'The full name must be a string.',
-            'full_name.max' => 'The full name may not be greater than 255 characters.',
             'address.required' => 'The address is required.',
-            'address.string' => 'The address must be a string.',
-            'address.max' => 'The address may not be greater than 255 characters.',
+
+            'title.required' => 'Title is required for admins.',
+            'title.string' => 'Title must be a string.',
+            'title.max' => 'Title must not exceed 255 characters.',
+            'title.prohibited' => 'Regular users cannot set a title.',
+
+            'email.required_without' => 'Either email or phone is required.',
+            'phone.required_without' => 'Either phone or email is required.',
+            'phone.regex' => 'The phone must contain only numbers.',
+
             'description.required' => 'The description is required.',
-            'description.string' => 'The description must be a string.',
             'academic_year.required' => 'The academic year is required.',
-            'academic_year.string' => 'The academic year must be a string.',
-            'academic_year.max' => 'The academic year may not be greater than 255 characters.',
             'support_type.required' => 'The support type is required.',
-            'support_type.string' => 'The support type must be a string.',
-            'support_type.in' => 'The support type must be either laptopsupport or tuitionassistance.',
             'university_id_photo.required' => 'The university ID photo is required.',
-            'university_id_photo.file' => 'The university ID photo must be a file.',
-            'university_id_photo.mimes' => 'The university ID photo must be a file of type: jpg, jpeg, png, pdf.',
-            'university_id_photo.max' => 'The university ID photo may not be greater than 5MB.',
+
+            'required_amount.required' => 'The required amount is required for admins.',
+            'personal_picture.required' => 'The personal picture is required for admins.',
         ];
     }
 }

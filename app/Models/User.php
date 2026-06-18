@@ -43,23 +43,24 @@ class User extends Authenticatable
     // 🔥 نظام الرصيد متعدد العملات
     // ================================
 
-    private function normalizeBalances()
+    private function normalizeBalances(): array
     {
-        $balances = $this->balances;
+        $raw = $this->getRawOriginal('balances') ?? $this->attributes['balances'] ?? null;
 
-        // NULL أو فارغ
-        if (empty($balances)) {
+        if (empty($raw)) {
             return [];
         }
 
-        // إذا كانت JSON string
-        if (is_string($balances)) {
-            $decoded = json_decode($balances, true);
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
             return is_array($decoded) ? $decoded : [];
         }
 
-        // إذا كانت Array
-        return is_array($balances) ? $balances : [];
+        if (is_array($raw)) {
+            return $raw;
+        }
+
+        return [];
     }
 
     public function getBalance($currency)
@@ -70,27 +71,13 @@ class User extends Authenticatable
 
     public function addBalance($currency, $amount)
     {
-        if ($amount <= 0) {
-            return false; // تجاهل المبالغ السالبة أو الصفرية
-        }
+        if ($amount <= 0) return false;
+
+        // 🔥 refresh من DB لتجنب stale data
+        $this->refresh();
+
         $balances = $this->normalizeBalances();
-
-
         $balances[$currency] = ($balances[$currency] ?? 0) + $amount;
-
-        $this->balances = $balances;
-        $this->save();
-    }
-
-    public function subtractBalance($currency, $amount)
-    {
-        $balances = $this->normalizeBalances();
-
-        if (($balances[$currency] ?? 0) < $amount) {
-            return false;
-        }
-
-        $balances[$currency] -= $amount;
 
         $this->balances = $balances;
         $this->save();
@@ -98,10 +85,37 @@ class User extends Authenticatable
         return true;
     }
 
+    public function subtractBalance($currency, $amount)
+    {
+        if ($amount <= 0) return false;
+
+        // 🔥 refresh من DB لتجنب stale data
+        $this->refresh();
+
+        $balances = $this->normalizeBalances();
+        $current = $balances[$currency] ?? 0;
+
+        if ($current < $amount) return false;
+
+        $balances[$currency] = $current - $amount;
+
+        $this->balances = $balances;
+        $this->save();
+
+        return true;
+    }
+    // ================================
+    // 🔥 علاقة المتبرع
+    // ================================
+
     public function donor()
     {
         return $this->hasOne(Donor::class);
     }
+
+    // ================================
+    // 🔥 أسعار العملات
+    // ================================
 
     public static function currencyRates()
     {
@@ -120,4 +134,16 @@ class User extends Authenticatable
         $rates = self::currencyRates();
         return $amount * ($rates[$currency] ?? 1);
     }
+    public function getOrCreateDonor()
+{
+    if ($this->donor) {
+        return $this->donor;
+    }
+
+    return Donor::create([
+        'user_id'   => $this->id,
+        'anonymous' => false,
+    ]);
+}
+
 }

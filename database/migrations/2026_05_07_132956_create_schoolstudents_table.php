@@ -15,8 +15,6 @@ return new class extends Migration
     $table->id();
 
     $table->foreignId('request_id')->constrained('requests')->onDelete('cascade');
-    $table->decimal('required_amount', 10, 2)->default(0);
-
     $table->string('academic_grade');
     $table->string('school_name');
     $table->string('family_book_photo'); // ملف دفتر العائلة

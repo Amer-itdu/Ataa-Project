@@ -10,7 +10,6 @@ class Orphan extends Model
         'request_id',
         'family_booklet',
         'father_death_certificate',
-        'required_amount',
     ];
 
     public function request()

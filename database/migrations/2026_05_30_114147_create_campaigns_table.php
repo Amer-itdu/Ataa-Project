@@ -18,12 +18,12 @@ return new class extends Migration
             $table->string('title');
             $table->text('description')->nullable();
 
-            // نوع الحملة: تعليمية - طبية - إنسانية - بيئية
+            // نوع الحملة
             $table->enum('type', [
-                'educational',     // حملات تعليمية
-                'medical',         // حملات طبية
-                'humanitarian',    // حملات إنسانية
-                'environmental'    // حملات بيئية
+                'educational',
+                'medical',
+                'humanitarian',
+                'environmental'
             ]);
 
             // التبرعات
@@ -36,14 +36,14 @@ return new class extends Migration
 
             // حالة الحملة
             $table->enum('status', [
-                'open',                   // مفتوحة
-                'closed',                 // مغلقة يدويًا
-                'completed_donations',    // اكتملت التبرعات
-                'completed_volunteers',   // اكتمل عدد المتطوعين
-                'completed_all',          // اكتمل كل شيء
-                'expired',                // انتهى الوقت
-                'paused',                 // متوقفة مؤقتًا
-                'cancelled'               // ملغاة
+                'open',                 // مفتوحة
+                'closed',               // مغلقة يدويًا
+                'completed_donations',  // اكتملت التبرعات
+                'completed_volunteers', // اكتمل عدد المتطوعين
+                'completed_all',        // اكتمل كل شيء
+                'expired',              // انتهى الوقت
+                'paused',               // متوقفة مؤقتًا
+                'cancelled'             // ملغاة
             ])->default('open');
 
             // التواريخ
@@ -53,11 +53,11 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // جدول صور الحملة (يدعم عدة صور)
+        // جدول صور الحملة
         Schema::create('campaign_media', function (Blueprint $table) {
             $table->id();
             $table->foreignId('campaign_id')->constrained()->onDelete('cascade');
-            $table->string('image'); // مسار الصورة
+            $table->string('image');
             $table->timestamps();
         });
     }
