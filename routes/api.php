@@ -4,6 +4,7 @@ use App\Http\Controllers\BeneficiaryController;
 use App\Http\Controllers\CampaignController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DonationController;
+use App\Http\Controllers\LocationController;
 use App\Http\Controllers\RequestController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VolunteerController;
@@ -27,24 +28,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/userprofile/update', [UserController::class, 'updateProfile']);
     //Amer
     //status management for users by admin and sub_admin    
-    Route::post('/approveUser/{id}', [UserController::class, 'approveUser']);
-    Route::post('/rejectUser/{id}', [UserController::class, 'rejectUser']);
-    Route::post('/setPending/{id}', [UserController::class, 'setPending']);
-    Route::get('/getAllPendingUsers', [UserController::class, 'getAllPendingUsers']);
-    Route::get('/getAllNonUserAccounts', [UserController::class, 'getAllNonUserAccounts']);
-    //dashbored
-    Route::post('/createEmployee', [UserController::class, 'createEmployee']);
-    Route::post('/changePassword', [UserController::class, 'changePassword']);
 
-    Route::post('/addBalanceToUser/{userId}', [UserController::class, 'addBalanceToUser']);
+    //dashbored
+
     Route::get('/myDonationsFull', [UserController::class, 'myDonationsFull']);
     //dashboard
-    Route::get('/dashboard/kpis', [DashboardController::class, 'kpis']);
-    Route::get('/dashboard/monthly-donations', [DashboardController::class, 'monthlyDonations']);
-    Route::get('/dashboard/cases', [DashboardController::class, 'casesByStatus']);
-    Route::get('/dashboard/recent-donations', [DashboardController::class, 'recentDonations']);
-    Route::get('/dashboard/top-campaigns', [DashboardController::class, 'topCampaigns']);
-    //
+
 
     Route::get('/user', function (Request $request) {
         return $request->user();
@@ -111,3 +100,49 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/donate', [DonationController::class, 'donate']);
     Route::get('/mydonations', [DonationController::class, 'myDonationsSummary']);
 });
+//Dashboard routes dashboard 
+//Dashboard routes
+
+
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('/createEmployee', [UserController::class, 'createEmployee']);
+    Route::post('/approveUser/{id}', [UserController::class, 'approveUser']);
+    Route::post('/setPending/{id}', [UserController::class, 'setPending']);
+    Route::get('/getAllPendingUsers', [UserController::class, 'getAllPendingUsers']);
+    Route::get('/getAllNonUserAccounts', [UserController::class, 'getAllNonUserAccounts']);
+    Route::post('/changePassword', [UserController::class, 'changePassword']);
+
+    Route::post('/promoteUser/{id}', [UserController::class, 'promoteUser']);
+    Route::post('/demoteUser/{id}', [UserController::class, 'demoteUser']);
+    Route::get('/listByRole/{role}', [UserController::class, 'listByRole']);
+
+
+    Route::get('/getUserById/{id}', [UserController::class, 'getUserById']);
+    Route::get('/getAllUsers', [UserController::class, 'getallUsers']);
+
+    Route::post('/addBalanceToUser/{userId}', [UserController::class, 'addBalanceToUser']);
+});
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('storepatient', [RequestController::class, 'storePatientRequest']);
+    Route::post('storeorphan', [RequestController::class, 'storeOrphanRequest']);
+    Route::post('storeschool', [RequestController::class, 'storeSchoolRequest']);
+    Route::post('storeuniversity', [RequestController::class, 'storeUniversityRequest']);
+    Route::get('getpendingrequests', [RequestController::class, 'getPendingRequests']);
+    Route::get('getpendingpatients', [RequestController::class, 'getPendingPatients']);
+    Route::get('getpendingorphans', [RequestController::class, 'getPendingOrphans']);
+    Route::get('getpendingschools', [RequestController::class, 'getPendingSchool']);
+    Route::get('getpendinguniversities', [RequestController::class, 'getPendingUniversity']);
+    Route::put('closeRequest/{id}', [RequestController::class, 'closeRequest']);
+    Route::put('acceptRequest/{id}', [RequestController::class, 'acceptRequest']);
+});
+Route::middleware(['auth:sanctum'])->group(function () {
+    //statistics and KPIs
+    Route::get('/dashboard/kpis', [DashboardController::class, 'kpis']);
+    Route::get('/dashboard/monthly-donations', [DashboardController::class, 'monthlyDonations']);
+    Route::get('/dashboard/cases', [DashboardController::class, 'casesByStatus']);
+    Route::get('/dashboard/recent-donations', [DashboardController::class, 'recentDonations']);
+    Route::get('/dashboard/top-campaigns', [DashboardController::class, 'topCampaigns']);
+    Route::get('/dashboard/cases-by-governorate', [DashboardController::class, 'casesByGovernorate']);
+});
+Route::get('/governorates', [LocationController::class, 'getGovernorates']);
+Route::get('/governorates/{id}/regions', [LocationController::class, 'getRegions']);

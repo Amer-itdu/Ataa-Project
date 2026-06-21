@@ -14,6 +14,7 @@ use App\Models\Patient;
 use App\Models\SchoolStudent;
 use App\Models\UniversityStudent;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class RequestController extends Controller
 {
@@ -30,10 +31,12 @@ class RequestController extends Controller
         // 1) Beneficiary data
         if ($isAdmin) {
             $beneficiaryData = [
-                'full_name' => $request->full_name,
-                'address'   => $request->address,
-                'email'     => $request->email,
-                'phone'     => $request->phone,
+                'full_name'      => $request->full_name,
+                'governorate_id' => $request->governorate_id,
+                'region_id'      => $request->region_id,
+                'national_id'    => $request->national_id,
+                'email'          => $request->email,
+                'phone'          => $request->phone,
             ];
 
             $requiredAmount = $request->required_amount;
@@ -42,17 +45,21 @@ class RequestController extends Controller
 
             if ($request->is_self === "true") {
                 $beneficiaryData = [
-                    'full_name' => $request->full_name,
-                    'address'   => $request->address,
-                    'email'     => $user->email,
-                    'phone'     => $user->phone,
+                    'full_name'      => $request->full_name,
+                    'governorate_id' => $request->governorate_id,
+                    'region_id'      => $request->region_id,
+                    'national_id'    => $request->national_id,
+                    'email'          => $user->email,
+                    'phone'          => $user->phone,
                 ];
             } else {
                 $beneficiaryData = [
-                    'full_name' => $request->full_name,
-                    'address'   => $request->address,
-                    'email'     => $request->email,
-                    'phone'     => $request->phone,
+                    'full_name'      => $request->full_name,
+                    'governorate_id' => $request->governorate_id,
+                    'region_id'      => $request->region_id,
+                    'national_id'    => $request->national_id,
+                    'email'          => $request->email,
+                    'phone'          => $request->phone,
                 ];
             }
 
@@ -60,11 +67,8 @@ class RequestController extends Controller
             $status = 'pending';
         }
 
-        // 2) Beneficiary
-        $beneficiary = Beneficiary::updateOrCreate(
-            ['full_name' => $request->full_name],
-            $beneficiaryData
-        );
+        // 2) Beneficiary — updateOrCreate باستخدام national_id كمفتاح فريد
+        $beneficiary = $this->findOrCreateBeneficiary($beneficiaryData);
 
         // 3) personal_picture (admin only)
         $personalPicturePath = null;
@@ -90,14 +94,15 @@ class RequestController extends Controller
         $medicalReportPath = $request->file('medical_report')
             ->store('medical_reports', 'public');
 
-        $nationalIdPath = $request->file('national_id')
+        $nationalIdDocPath = $request->file('national_id_document')
             ->store('national_ids', 'public');
 
         // 6) Patient record
         $patient = Patient::create([
-            'request_id'      => $requestModel->id,
-            'medical_report'  => $medicalReportPath,
-            'national_id'     => $nationalIdPath,
+            'request_id'     => $requestModel->id,
+            'medical_report' => $medicalReportPath,
+            'national_id_document' => $nationalIdDocPath,
+
         ]);
 
         return response()->json([
@@ -107,11 +112,12 @@ class RequestController extends Controller
             'patient'     => $patient,
         ], 201);
     }
+
     /*
-    |--------------------------------------------------------------------------
-    | SCHOOL REQUEST
-    |--------------------------------------------------------------------------
-    */
+|--------------------------------------------------------------------------
+| SCHOOL REQUEST
+|--------------------------------------------------------------------------
+*/
     public function storeSchoolRequest(StoreSchoolRequest $request)
     {
         $user = Auth::user();
@@ -120,10 +126,12 @@ class RequestController extends Controller
         // 1) Beneficiary
         if ($isAdmin) {
             $beneficiaryData = [
-                'full_name' => $request->full_name,
-                'address'   => $request->address,
-                'email'     => $request->email,
-                'phone'     => $request->phone,
+                'full_name'      => $request->full_name,
+                'governorate_id' => $request->governorate_id,
+                'region_id'      => $request->region_id,
+                'national_id'    => $request->national_id,
+                'email'          => $request->email,
+                'phone'          => $request->phone,
             ];
 
             $requiredAmount = $request->required_amount;
@@ -131,10 +139,12 @@ class RequestController extends Controller
         } else {
 
             $beneficiaryData = [
-                'full_name' => $request->full_name,
-                'address'   => $request->address,
-                'email'     => $user->email,
-                'phone'     => $user->phone,
+                'full_name'      => $request->full_name,
+                'governorate_id' => $request->governorate_id,
+                'region_id'      => $request->region_id,
+                'national_id'    => $request->national_id,
+                'email'          => $user->email,
+                'phone'          => $user->phone,
             ];
 
             $requiredAmount = 0;
@@ -142,10 +152,7 @@ class RequestController extends Controller
         }
 
         // 2) Beneficiary
-        $beneficiary = Beneficiary::updateOrCreate(
-            ['full_name' => $request->full_name],
-            $beneficiaryData
-        );
+        $beneficiary = $this->findOrCreateBeneficiary($beneficiaryData);
 
         // 3) personal_picture (admin only)
         $personalPicturePath = null;
@@ -187,11 +194,11 @@ class RequestController extends Controller
         ], 201);
     }
 
-
-
-    //|--------------------------------------------------------------------------
-    //| UNIVERSITY REQUEST
-    //|--------------------------------------------------------------------------s
+    /*
+|--------------------------------------------------------------------------
+| UNIVERSITY REQUEST
+|--------------------------------------------------------------------------
+*/
     public function storeUniversityRequest(StoreUniversityRequest $request)
     {
         $user = Auth::user();
@@ -200,10 +207,12 @@ class RequestController extends Controller
         // 1) Beneficiary
         if ($isAdmin) {
             $beneficiaryData = [
-                'full_name' => $request->full_name,
-                'address'   => $request->address,
-                'email'     => $request->email,
-                'phone'     => $request->phone,
+                'full_name'      => $request->full_name,
+                'governorate_id' => $request->governorate_id,
+                'region_id'      => $request->region_id,
+                'national_id'    => $request->national_id,
+                'email'          => $request->email,
+                'phone'          => $request->phone,
             ];
 
             $requiredAmount = $request->required_amount;
@@ -211,10 +220,12 @@ class RequestController extends Controller
         } else {
 
             $beneficiaryData = [
-                'full_name' => $request->full_name,
-                'address'   => $request->address,
-                'email'     => $user->email,
-                'phone'     => $user->phone,
+                'full_name'      => $request->full_name,
+                'governorate_id' => $request->governorate_id,
+                'region_id'      => $request->region_id,
+                'national_id'    => $request->national_id,
+                'email'          => $user->email,
+                'phone'          => $user->phone,
             ];
 
             $requiredAmount = 0;
@@ -222,10 +233,7 @@ class RequestController extends Controller
         }
 
         // 2) Beneficiary
-        $beneficiary = Beneficiary::updateOrCreate(
-            ['full_name' => $request->full_name],
-            $beneficiaryData
-        );
+        $beneficiary = $this->findOrCreateBeneficiary($beneficiaryData);
 
         // 3) personal_picture (admin only)
         $personalPicturePath = null;
@@ -266,6 +274,12 @@ class RequestController extends Controller
             'universityStudent' => $universityStudent,
         ], 201);
     }
+
+    /*
+|--------------------------------------------------------------------------
+| ORPHAN REQUEST
+|--------------------------------------------------------------------------
+*/
     public function storeOrphanRequest(StoreOrphanRequest $request)
     {
         $user = Auth::user();
@@ -275,10 +289,12 @@ class RequestController extends Controller
         if ($isAdmin) {
 
             $beneficiaryData = [
-                'full_name' => $request->full_name,
-                'address'   => $request->address,
-                'email'     => null, // ممنوع
-                'phone'     => $request->phone,
+                'full_name'      => $request->full_name,
+                'governorate_id' => $request->governorate_id,
+                'region_id'      => $request->region_id,
+                'national_id'    => $request->national_id,
+                'email'          => null, // ممنوع
+                'phone'          => $request->phone,
             ];
 
             $requiredAmount = $request->required_amount;
@@ -286,10 +302,12 @@ class RequestController extends Controller
         } else {
 
             $beneficiaryData = [
-                'full_name' => $request->full_name,
-                'address'   => $request->address,
-                'email'     => null, // ممنوع
-                'phone'     => $request->phone,
+                'full_name'      => $request->full_name,
+                'governorate_id' => $request->governorate_id,
+                'region_id'      => $request->region_id,
+                'national_id'    => $request->national_id,
+                'email'          => null, // ممنوع
+                'phone'          => $request->phone,
             ];
 
             $requiredAmount = 0;
@@ -297,10 +315,7 @@ class RequestController extends Controller
         }
 
         // 2) إنشاء أو تحديث المستفيد
-        $beneficiary = Beneficiary::updateOrCreate(
-            ['full_name' => $request->full_name],
-            $beneficiaryData
-        );
+        $beneficiary = $this->findOrCreateBeneficiary($beneficiaryData);
 
         // 3) personal_picture فقط للأدمن
         $personalPicturePath = null;
@@ -344,10 +359,37 @@ class RequestController extends Controller
             'orphan'      => $orphan,
         ], 201);
     }
+
+    /*
+|--------------------------------------------------------------------------
+| HELPER: Find or create Beneficiary by national_id
+|--------------------------------------------------------------------------
+*/
+    private function findOrCreateBeneficiary(array $data): Beneficiary
+    {
+        // لو national_id موجود وغير فاضي → نبحث/نحدّث بناءً عليه
+        if (!empty($data['national_id'])) {
+            return Beneficiary::updateOrCreate(
+                ['national_id' => $data['national_id']],
+                $data
+            );
+        }
+
+        // لو national_id فاضي/null → ننشئ سجل جديد دايماً
+        // (تجنباً لتصادم كل المستفيدين اللي بدون national_id ببعض)
+        return Beneficiary::create($data);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | PENDING REQUESTS (GENERAL)
+    |--------------------------------------------------------------------------
+    */
     public function getPendingRequests()
     {
         $requests = RequestModel::with([
-            'beneficiary',
+            'beneficiary.governorate',
+            'beneficiary.region',
             'patient',
             'orphan',
             'schoolStudent',
@@ -361,9 +403,10 @@ class RequestController extends Controller
             'data'   => $requests
         ]);
     }
+
     public function getPendingPatients()
     {
-        $requests = RequestModel::with(['beneficiary', 'patient'])
+        $requests = RequestModel::with(['beneficiary.governorate', 'beneficiary.region', 'patient'])
             ->where('status', 'pending')
             ->where('request_type', 'patient')
             ->get();
@@ -373,9 +416,10 @@ class RequestController extends Controller
             'data'   => $requests
         ]);
     }
+
     public function getPendingOrphans()
     {
-        $requests = RequestModel::with(['beneficiary', 'orphan'])
+        $requests = RequestModel::with(['beneficiary.governorate', 'beneficiary.region', 'orphan'])
             ->where('status', 'pending')
             ->where('request_type', 'orphan')
             ->get();
@@ -385,9 +429,10 @@ class RequestController extends Controller
             'data'   => $requests
         ]);
     }
+
     public function getPendingSchool()
     {
-        $requests = RequestModel::with(['beneficiary', 'schoolStudent'])
+        $requests = RequestModel::with(['beneficiary.governorate', 'beneficiary.region', 'schoolStudent'])
             ->where('status', 'pending')
             ->where('request_type', 'school')
             ->get();
@@ -397,9 +442,10 @@ class RequestController extends Controller
             'data'   => $requests
         ]);
     }
+
     public function getPendingUniversity()
     {
-        $requests = RequestModel::with(['beneficiary', 'universityStudent'])
+        $requests = RequestModel::with(['beneficiary.governorate', 'beneficiary.region', 'universityStudent'])
             ->where('status', 'pending')
             ->where('request_type', 'university')
             ->get();
@@ -409,21 +455,27 @@ class RequestController extends Controller
             'data'   => $requests
         ]);
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | OPEN & ACCEPTED REQUESTS
+    |--------------------------------------------------------------------------
+    */
     public function getOpenAcceptedRequests()
     {
         $requests = RequestModel::with([
-            'beneficiary',
+            'beneficiary.governorate',
+            'beneficiary.region',
             'patient.donations',
             'orphan.donations',
             'schoolStudent.donations',
             'universityStudent.donations'
         ])
-            ->where('status', 'accepted')          // الحالة مقبولة
-            ->where('status_request', 'open')      // ولسا مفتوحة
+            ->where('status', 'accepted')
+            ->where('status_request', 'open')
             ->get()
             ->map(function ($req) {
 
-                // تحديد نوع الحالة
                 $target = match ($req->request_type) {
                     'patient'    => $req->patient,
                     'orphan'     => $req->orphan,
@@ -431,23 +483,18 @@ class RequestController extends Controller
                     'university' => $req->universityStudent,
                 };
 
-                // مجموع التبرعات
                 $donated = $target->donations()
                     ->where('status', 'approved')
                     ->sum('amount');
 
-                // المطلوب
                 $required = $req->required_amount;
 
-                // نسبة التقدم
                 $progress = $required > 0
                     ? round(($donated / $required) * 100, 2)
                     : 0;
 
-                // كم باقي
                 $remaining = max($required - $donated, 0);
 
-                // إضافة القيم للنتيجة
                 $req->donated_amount = $donated;
                 $req->remaining_amount = $remaining;
                 $req->progress_percentage = $progress;
@@ -460,9 +507,10 @@ class RequestController extends Controller
             'data' => $requests
         ]);
     }
+
     public function getOpenAcceptedPatients()
     {
-        $requests = RequestModel::with(['patient.donations', 'beneficiary'])
+        $requests = RequestModel::with(['patient.donations', 'beneficiary.governorate', 'beneficiary.region'])
             ->where('status', 'accepted')
             ->where('status_request', 'open')
             ->where('request_type', 'patient')
@@ -483,9 +531,10 @@ class RequestController extends Controller
 
         return response()->json($requests);
     }
+
     public function getOpenAcceptedOrphans()
     {
-        $requests = RequestModel::with(['orphan.donations', 'beneficiary'])
+        $requests = RequestModel::with(['orphan.donations', 'beneficiary.governorate', 'beneficiary.region'])
             ->where('status', 'accepted')
             ->where('status_request', 'open')
             ->where('request_type', 'orphan')
@@ -506,9 +555,10 @@ class RequestController extends Controller
 
         return response()->json($requests);
     }
+
     public function getOpenAcceptedSchoolStudents()
     {
-        $requests = RequestModel::with(['schoolStudent.donations', 'beneficiary'])
+        $requests = RequestModel::with(['schoolStudent.donations', 'beneficiary.governorate', 'beneficiary.region'])
             ->where('status', 'accepted')
             ->where('status_request', 'open')
             ->where('request_type', 'school')
@@ -529,9 +579,10 @@ class RequestController extends Controller
 
         return response()->json($requests);
     }
+
     public function getOpenAcceptedUniversityStudents()
     {
-        $requests = RequestModel::with(['universityStudent.donations', 'beneficiary'])
+        $requests = RequestModel::with(['universityStudent.donations', 'beneficiary.governorate', 'beneficiary.region'])
             ->where('status', 'accepted')
             ->where('status_request', 'open')
             ->where('request_type', 'university')
@@ -552,11 +603,16 @@ class RequestController extends Controller
 
         return response()->json($requests);
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | CLOSE REQUEST
+    |--------------------------------------------------------------------------
+    */
     public function closeRequest($id)
     {
         $req = RequestModel::findOrFail($id);
 
-        // إذا كانت مسكرة مسبقاً
         if ($req->status_request === 'closed') {
             return response()->json([
                 'success' => false,
@@ -564,7 +620,6 @@ class RequestController extends Controller
             ], 400);
         }
 
-        // إغلاق الحالة
         $req->update([
             'status_request' => 'closed'
         ]);
@@ -583,7 +638,6 @@ class RequestController extends Controller
     */
     public function acceptRequest(AcceptRequestRequest $request, $id)
     {
-        // التحقق من أن المستخدم أدمن
         $user = Auth::user();
         if (!$user || $user->role !== 'admin') {
             return response()->json([
@@ -592,10 +646,8 @@ class RequestController extends Controller
             ], 403);
         }
 
-        // البحث عن الطلب
         $requestModel = RequestModel::findOrFail($id);
 
-        // التحقق من أن الحالة بحالة pending أو مرفوضة سابقاً
         if ($requestModel->status === 'accepted') {
             return response()->json([
                 'success' => false,
@@ -603,40 +655,32 @@ class RequestController extends Controller
             ], 400);
         }
 
-        // إعداد البيانات المراد تحديثها
         $updateData = [
             'status' => 'accepted',
         ];
 
-        // تحديث title إذا تم توفيره
         if ($request->has('title') && !empty($request->title)) {
             $updateData['title'] = $request->title;
         }
 
-        // تحديث description إذا تم توفيره
         if ($request->has('description') && !empty($request->description)) {
             $updateData['description'] = $request->description;
         }
 
-        // تحديث required_amount إذا تم توفيره
         if ($request->has('required_amount') && $request->required_amount !== null) {
             $updateData['required_amount'] = $request->required_amount;
         }
 
-        // تحديث personal_picture إذا تم رفع صورة جديدة
         if ($request->hasFile('personal_picture')) {
-            // حذف الصورة القديمة إذا كانت موجودة
             if ($requestModel->personal_picture) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($requestModel->personal_picture);
+                Storage::disk('public')->delete($requestModel->personal_picture);
             }
 
-            // رفع الصورة الجديدة
             $personalPicturePath = $request->file('personal_picture')
                 ->store('personal_pictures', 'public');
             $updateData['personal_picture'] = $personalPicturePath;
         }
 
-        // تحديث الطلب
         $requestModel->update($updateData);
 
         return response()->json([

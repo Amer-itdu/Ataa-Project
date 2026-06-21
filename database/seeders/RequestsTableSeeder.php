@@ -10,7 +10,9 @@ use App\Models\{
     Patient,
     Orphan,
     SchoolStudent,
-    UniversityStudent
+    UniversityStudent,
+    Governorate,
+    Region
 };
 
 class RequestsTableSeeder extends Seeder
@@ -20,6 +22,13 @@ class RequestsTableSeeder extends Seeder
         $marwa = User::where('email', 'marwa.alsaour@example.com')->first();
         $salam = User::where('email', 'salam.labbad@example.com')->first();
 
+        // Helper to get governorate + region
+        $getLocation = function ($govName, $regionName) {
+            $gov = Governorate::where('name', $govName)->first();
+            $region = Region::where('name', $regionName)->first();
+            return [$gov?->id, $region?->id];
+        };
+
         /*
         |--------------------------------------------------------------------------
         | MARWA REQUESTS
@@ -28,12 +37,16 @@ class RequestsTableSeeder extends Seeder
         if ($marwa) {
 
             // Beneficiary 1
+            [$gov1, $reg1] = $getLocation('Damascus', 'Mezzeh');
+
             $b1 = Beneficiary::updateOrCreate(
-                ['email' => 'khaled.m@example.com'],
+                ['national_id' => '111111111'],
                 [
-                    'full_name' => 'Khaled Mansour',
-                    'address'   => 'Damascus',
-                    'phone'     => '0999001111',
+                    'full_name'      => 'Khaled Mansour',
+                    'governorate_id' => $gov1,
+                    'region_id'      => $reg1,
+                    'email'          => 'khaled.m@example.com',
+                    'phone'          => '0999001111',
                 ]
             );
 
@@ -48,14 +61,15 @@ class RequestsTableSeeder extends Seeder
                     'status'         => 'pending',
                     'description'    => 'Patient request for Khaled.',
                     'required_amount'=> 500,
+                    'status_request' => 'open',
                 ]
             );
 
             Patient::updateOrCreate(
                 ['request_id' => $r1->id],
                 [
-                    'medical_report' => 'report.pdf',
-                    'national_id'    => 'id.jpg',
+                    'medical_report'       => 'report.pdf',
+                    'national_id_document' => 'id.jpg',
                 ]
             );
 
@@ -70,6 +84,7 @@ class RequestsTableSeeder extends Seeder
                     'status'         => 'pending',
                     'description'    => 'School support request for Khaled.',
                     'required_amount'=> 0,
+                    'status_request' => 'open',
                 ]
             );
 
@@ -83,12 +98,16 @@ class RequestsTableSeeder extends Seeder
             );
 
             // Beneficiary 2
+            [$gov2, $reg2] = $getLocation('Homs', 'Waer');
+
             $b2 = Beneficiary::updateOrCreate(
-                ['email' => 'rama.s@example.com'],
+                ['national_id' => '222222222'],
                 [
-                    'full_name' => 'Rama Saeed',
-                    'address'   => 'Homs',
-                    'phone'     => '0999002222',
+                    'full_name'      => 'Rama Saeed',
+                    'governorate_id' => $gov2,
+                    'region_id'      => $reg2,
+                    'email'          => 'rama.s@example.com',
+                    'phone'          => '0999002222',
                 ]
             );
 
@@ -103,14 +122,15 @@ class RequestsTableSeeder extends Seeder
                     'status'         => 'pending',
                     'description'    => 'Patient request for Rama.',
                     'required_amount'=> 700,
+                    'status_request' => 'open',
                 ]
             );
 
             Patient::updateOrCreate(
                 ['request_id' => $r3->id],
                 [
-                    'medical_report' => 'report2.pdf',
-                    'national_id'    => 'id2.jpg',
+                    'medical_report'       => 'report2.pdf',
+                    'national_id_document' => 'id2.jpg',
                 ]
             );
         }
@@ -123,12 +143,16 @@ class RequestsTableSeeder extends Seeder
         if ($salam) {
 
             // Beneficiary 3
+            [$gov3, $reg3] = $getLocation('Latakia', 'Saliba');
+
             $b3 = Beneficiary::updateOrCreate(
-                ['email' => 'salma.a@example.com'],
+                ['national_id' => '333333333'],
                 [
-                    'full_name' => 'Salma Ahmed',
-                    'address'   => 'Latakia',
-                    'phone'     => '0999003333',
+                    'full_name'      => 'Salma Ahmed',
+                    'governorate_id' => $gov3,
+                    'region_id'      => $reg3,
+                    'email'          => 'salma.a@example.com',
+                    'phone'          => '0999003333',
                 ]
             );
 
@@ -143,6 +167,7 @@ class RequestsTableSeeder extends Seeder
                     'status'         => 'pending',
                     'description'    => 'Orphan request for Salma.',
                     'required_amount'=> 0,
+                    'status_request' => 'open',
                 ]
             );
 
@@ -165,6 +190,7 @@ class RequestsTableSeeder extends Seeder
                     'status'         => 'pending',
                     'description'    => 'University support request for Salma.',
                     'required_amount'=> 0,
+                    'status_request' => 'open',
                 ]
             );
 
@@ -178,12 +204,16 @@ class RequestsTableSeeder extends Seeder
             );
 
             // Beneficiary 4
+            [$gov4, $reg4] = $getLocation('Aleppo', 'Jamiliyah');
+
             $b4 = Beneficiary::updateOrCreate(
-                ['email' => 'omar.s@example.com'],
+                ['national_id' => '444444444'],
                 [
-                    'full_name' => 'Omar Saad',
-                    'address'   => 'Aleppo',
-                    'phone'     => '0999004444',
+                    'full_name'      => 'Omar Saad',
+                    'governorate_id' => $gov4,
+                    'region_id'      => $reg4,
+                    'email'          => 'omar.s@example.com',
+                    'phone'          => '0999004444',
                 ]
             );
 
@@ -198,6 +228,7 @@ class RequestsTableSeeder extends Seeder
                     'status'         => 'pending',
                     'description'    => 'Orphan request for Omar.',
                     'required_amount'=> 0,
+                    'status_request' => 'open',
                 ]
             );
 

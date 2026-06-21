@@ -23,5 +23,6 @@ class DatabaseSeeder extends Seeder
         $this->call(VolunteersTableSeeder::class);
         $this->call(RequestsTableSeeder::class);
         $this->call(VolunteerCampaignsSeeder::class);
+        $this->call(GovernorateRegionSeeder::class);
     }
 }

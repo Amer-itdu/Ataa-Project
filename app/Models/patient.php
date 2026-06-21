@@ -9,7 +9,7 @@ class Patient extends Model
     protected $fillable = [
         'request_id',
         'medical_report',
-        'national_id',
+        'national_id_document',
     ];
 
     public function request()

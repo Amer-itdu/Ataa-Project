@@ -15,7 +15,7 @@ return new class extends Migration
      $table->id();
 
     $table->foreignId('request_id')->constrained('requests')->onDelete('cascade');
-    $table->string('national_id');//صوره
+    $table->string('national_id_document');//صوره
     $table->string('medical_report');     // ملف
 
     $table->timestamps();

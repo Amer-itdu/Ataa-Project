@@ -19,13 +19,15 @@ class DashboardController extends Controller
         $totalUsers = User::count();
         $totalCampaigns = Campaign::count();
 
-        // بعد حذف status من donations
         $totalApprovedDonations = Donation::count();
         $totalDonatedUsd = Donation::sum('amount');
 
         $totalPendingRequests = RequestModel::where('status', 'pending')->count();
         $totalAcceptedRequests = RequestModel::where('status', 'accepted')->count();
         $totalRejectedRequests = RequestModel::where('status', 'rejected')->count();
+
+        $totalOpenRequests = RequestModel::where('status_request', 'open')->count();
+        $totalClosedRequests = RequestModel::where('status_request', 'closed')->count();
 
         return response()->json([
             'success' => true,
@@ -37,6 +39,8 @@ class DashboardController extends Controller
                 'pending_requests' => $totalPendingRequests,
                 'accepted_requests' => $totalAcceptedRequests,
                 'rejected_requests' => $totalRejectedRequests,
+                'open_requests' => $totalOpenRequests,
+                'closed_requests' => $totalClosedRequests,
             ],
         ], 200);
     }
@@ -80,7 +84,7 @@ class DashboardController extends Controller
     }
 
     // ============================================
-    // 3) casesByStatus — الحالات حسب الحالة
+    // 3) casesByStatus — الحالات حسب الحالة ونوعها
     // ============================================
     public function casesByStatus()
     {
@@ -90,6 +94,13 @@ class DashboardController extends Controller
             ->pluck('count', 'status')
             ->toArray();
 
+        // 🔥 توزيع إضافي حسب نوع الحالة (patient/orphan/school/university)
+        $byType = RequestModel::selectRaw('request_type, count(*) as count')
+            ->groupBy('request_type')
+            ->get()
+            ->pluck('count', 'request_type')
+            ->toArray();
+
         return response()->json([
             'success' => true,
             'cases_by_status' => [
@@ -97,11 +108,35 @@ class DashboardController extends Controller
                 'accepted' => $statuses['accepted'] ?? 0,
                 'rejected' => $statuses['rejected'] ?? 0,
             ],
+            'cases_by_type' => [
+                'patient' => $byType['patient'] ?? 0,
+                'orphan' => $byType['orphan'] ?? 0,
+                'school' => $byType['school'] ?? 0,
+                'university' => $byType['university'] ?? 0,
+            ],
+        ], 200);
+    }
+
+    // ============================================
+    // 4) casesByGovernorate — توزيع الحالات جغرافياً
+    // ============================================
+    public function casesByGovernorate()
+    {
+        $data = RequestModel::join('beneficiaries', 'requests.beneficiary_id', '=', 'beneficiaries.id')
+            ->join('governorates', 'beneficiaries.governorate_id', '=', 'governorates.id')
+            ->selectRaw('governorates.name as governorate, count(*) as total_cases')
+            ->groupBy('governorates.name')
+            ->orderByDesc('total_cases')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'cases_by_governorate' => $data,
         ], 200);
     }
 
     // ======================================================
-    // 4) recentDonations — آخر 10 تبرعات
+    // 5) recentDonations — آخر 10 تبرعات
     // ======================================================
     public function recentDonations()
     {
@@ -122,13 +157,18 @@ class DashboardController extends Controller
                         'amount_needed' => $target->amount_needed,
                         'amount_collected' => $target->amount_collected,
                     ];
-                } elseif ($target instanceof RequestModel) {
+                } elseif ($target instanceof \App\Models\Patient
+                    || $target instanceof \App\Models\Orphan
+                    || $target instanceof \App\Models\SchoolStudent
+                    || $target instanceof \App\Models\UniversityStudent
+                ) {
+                    $requestModel = $target->request;
                     $targetDetails = [
                         'type' => 'case',
-                        'id' => $target->id,
-                        'request_type' => $target->request_type,
-                        'status' => $target->status,
-                        'description' => $target->description,
+                        'id' => $requestModel->id ?? null,
+                        'request_type' => $requestModel->request_type ?? null,
+                        'status' => $requestModel->status ?? null,
+                        'description' => $requestModel->description ?? null,
                     ];
                 } else {
                     $targetDetails = [
@@ -137,16 +177,20 @@ class DashboardController extends Controller
                     ];
                 }
 
+                $donorUser = $donation->donor->user ?? null;
+
                 return [
                     'donation_id' => $donation->id,
                     'amount_usd' => number_format($donation->amount, 2, '.', ''),
                     'original_amount' => number_format($donation->original_amount, 2, '.', ''),
                     'original_currency' => $donation->original_currency,
-                    'donor' => [
-                        'id' => $donation->donor->user->id ?? null,
-                        'name' => $donation->donor->user->first_name ?? null,
-                        'email' => $donation->donor->user->email ?? null,
-                    ],
+                    'donor' => $donation->donor && $donation->donor->anonymous
+                        ? ['anonymous' => true]
+                        : [
+                            'id' => $donorUser->id ?? null,
+                            'name' => $donorUser ? trim($donorUser->first_name . ' ' . $donorUser->last_name) : null,
+                            'email' => $donorUser->email ?? null,
+                        ],
                     'target' => $targetDetails,
                     'created_at' => $donation->created_at->toDateTimeString(),
                 ];
@@ -159,7 +203,7 @@ class DashboardController extends Controller
     }
 
     // ======================================================
-    // 5) topCampaigns — أفضل 5 حملات حسب التبرعات
+    // 6) topCampaigns — أفضل 5 حملات حسب التبرعات
     // ======================================================
     public function topCampaigns()
     {

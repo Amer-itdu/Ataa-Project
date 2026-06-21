@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\AdminSignUpRequest;
 use App\Http\Requests\ChangePasswordRequest;
+use App\Http\Requests\PromoteUserRequest;
 use App\Models\User;
 use App\Http\Requests\SignUpRequest;
 use App\Http\Requests\SignInRequest;
@@ -33,15 +34,15 @@ class UserController extends Controller
             $validatedData = $request->validated();
 
             $query = User::query();
-            
+
             if (!empty($validatedData['email'])) {
                 $query->where('email', $validatedData['email']);
             }
-            
+
             if (!empty($validatedData['phone'])) {
                 $query->orWhere('phone', $validatedData['phone']);
             }
-            
+
             $existingUser = $query->first();
 
             if ($existingUser) {
@@ -68,7 +69,7 @@ class UserController extends Controller
 
             $validatedData['password'] = Hash::make($validatedData['password']);
 
-            $validatedData['status'] = 'approved'; 
+            $validatedData['status'] = 'approved';
             // 👤 إنشاء المستخدم
             $user = User::create($validatedData);
 
@@ -564,6 +565,132 @@ class UserController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Password changed successfully.',
+        ], 200);
+    }
+    
+    public function promoteUser(PromoteUserRequest $request, $id)
+    {
+        $authUser = Auth::user();
+
+        if (!$authUser || $authUser->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can promote users.',
+            ], 403);
+        }
+
+        $targetUser = User::findOrFail($id);
+
+        if ($targetUser->role === 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot change the role of an admin.',
+            ], 400);
+        }
+
+        if ($targetUser->role === $request->role) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User already has this role.',
+            ], 400);
+        }
+
+        $oldRole = $targetUser->role;
+
+        $targetUser->update([
+            'role' => $request->role,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "User role updated from {$oldRole} to {$request->role} successfully.",
+            'user' => $targetUser,
+        ], 200);
+    }
+
+    public function demoteUser($id)
+    {
+        $authUser = Auth::user();
+
+        if (!$authUser || $authUser->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can demote users.',
+            ], 403);
+        }
+
+        $targetUser = User::findOrFail($id);
+
+        if ($targetUser->role === 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot change the role of an admin.',
+            ], 400);
+        }
+
+        if ($targetUser->role === 'user') {
+            return response()->json([
+                'success' => false,
+                'message' => 'User already has the default role.',
+            ], 400);
+        }
+
+        $oldRole = $targetUser->role;
+
+        $targetUser->update([
+            'role' => 'user',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "User role reverted from {$oldRole} to user successfully.",
+            'user' => $targetUser,
+        ], 200);
+    }
+
+    
+    public function listByRole($role)
+    {
+        if (!in_array($role, ['admin', 'sub_admin', 'field_worker', 'user'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid role.',
+            ], 400);
+        }
+
+        $users = User::where('role', $role)
+            ->select('id', 'first_name', 'last_name', 'email', 'phone', 'role', 'status')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $users,
+        ], 200);
+    }
+    public function getUserById($id)
+    {
+        $user = User::find($id);
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found.',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'user' => $user,
+        ], 200);
+    }
+    public function getallUsers()
+    {
+        $users = User::all();
+
+        return response()->json([
+            'success' => true,
+            'count'   => $users->count(),
+            'users'   => $users
         ], 200);
     }
 }
