@@ -14,7 +14,15 @@ return new class extends Migration
             $table->foreignId('campaign_id')->constrained('campaigns')->cascadeOnDelete();
             $table->date('assigned_date')->nullable();
             $table->string('status')->default('pending');
+
+            // 🔥 بيانات خاصة بهذا التطوع المحدد لهذه الحملة
+            $table->string('available_time')->nullable();
+            $table->text('notes')->nullable();
+
             $table->timestamps();
+
+            // منع تطوع مكرر لنفس الحملة
+            $table->unique(['volunteer_id', 'campaign_id']);
         });
     }
 

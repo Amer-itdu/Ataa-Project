@@ -17,6 +17,7 @@ class Campaign extends Model
         'title',
         'description',
         'type',
+        'participation_type',   // 🔥 جديد
         'amount_needed',
         'amount_collected',
         'volunteers_needed',
@@ -40,11 +41,10 @@ class Campaign extends Model
     public function volunteers()
     {
         return $this->belongsToMany(Volunteer::class, 'volunteer_campaign', 'campaign_id', 'volunteer_id')
-                    ->using(VolunteerCampaign::class)
-                    ->withPivot(['assigned_date', 'status'])
-                    ->withTimestamps();
+            ->using(VolunteerCampaign::class)
+            ->withPivot(['assigned_date', 'status', 'available_time', 'notes'])
+            ->withTimestamps();
     }
-
     public function media()
     {
         return $this->hasMany(CampaignMedia::class);
@@ -92,5 +92,18 @@ class Campaign extends Model
             'minutes' => $minutes,
             'seconds' => $secs,
         ];
+    }
+
+    // ================================
+    // 🔥 نوع المشاركة المسموح بالحملة
+    // ================================
+    public function acceptsDonations(): bool
+    {
+        return in_array($this->participation_type, ['donation_only', 'donation_and_volunteer']);
+    }
+
+    public function acceptsVolunteers(): bool
+    {
+        return in_array($this->participation_type, ['volunteer_only', 'donation_and_volunteer']);
     }
 }

@@ -18,23 +18,29 @@ class Volunteer extends Model
         return $this->belongsTo(User::class);
     }
 
-    // علاقة مباشرة مع جدول pivot
     public function volunteerCampaigns()
     {
         return $this->hasMany(VolunteerCampaign::class);
     }
 
-    // Many To Many مع الحملات باستخدام Pivot Model
     public function campaigns()
     {
         return $this->belongsToMany(Campaign::class, 'volunteer_campaign', 'volunteer_id', 'campaign_id')
                     ->using(VolunteerCampaign::class)
-                    ->withPivot(['assigned_date', 'status'])
+                    ->withPivot(['assigned_date', 'status', 'available_time', 'notes'])
                     ->withTimestamps();
     }
 
     public function hours()
     {
         return $this->hasMany(VolunteerHour::class);
+    }
+
+    // ================================
+    // 🔥 helper: مجموع ساعات التطوع
+    // ================================
+    public function totalHours()
+    {
+        return $this->hours()->sum('hours');
     }
 }

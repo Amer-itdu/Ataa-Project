@@ -135,15 +135,19 @@ class User extends Authenticatable
         return $amount * ($rates[$currency] ?? 1);
     }
     public function getOrCreateDonor()
-{
-    if ($this->donor) {
-        return $this->donor;
+    {
+        if ($this->donor) {
+            return $this->donor;
+        }
+
+        return Donor::create([
+            'user_id'   => $this->id,
+            'anonymous' => false,
+        ]);
     }
-
-    return Donor::create([
-        'user_id'   => $this->id,
-        'anonymous' => false,
-    ]);
-}
-
+    // في User.php
+    public function volunteer()
+    {
+        return $this->hasOne(Volunteer::class);
+    }
 }

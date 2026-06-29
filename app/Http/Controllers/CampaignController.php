@@ -7,7 +7,7 @@ use App\Models\Donor;
 use App\Models\Donation;
 use App\Models\User;
 use App\Http\Requests\StoreCampaignRequest;
-use App\Http\Requests\StoreDonationRequest;
+use App\Http\Requests\UpdateCampaignRequest;
 use App\Http\Requests\VolunteerForCampaignRequest;
 use App\Models\Volunteer;
 use Illuminate\Support\Facades\Auth;
@@ -16,6 +16,11 @@ use Carbon\Carbon;
 
 class CampaignController extends Controller
 {
+    /*
+    |--------------------------------------------------------------------------
+    | CREATE CAMPAIGN
+    |--------------------------------------------------------------------------
+    */
     public function createCampaign(StoreCampaignRequest $request)
     {
         $user = Auth::user();
@@ -29,16 +34,12 @@ class CampaignController extends Controller
 
         $data = $request->validated();
 
-
         $data['user_id'] = $user->id;
         $data['amount_collected'] = 0;
         $data['volunteers_joined'] = 0;
-        $data['status'] = $data['status'] ?? 'open';
 
-        // إنشاء الحملة
         $campaign = Campaign::create($data);
 
-        // رفع الصور
         if ($request->hasFile('media')) {
             foreach ($request->file('media') as $file) {
                 $path = $file->store('campaign_media', 'public');
@@ -53,7 +54,12 @@ class CampaignController extends Controller
         ], 201);
     }
 
-    public function updateCampaign(StoreCampaignRequest $request, $id)
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE CAMPAIGN
+    |--------------------------------------------------------------------------
+    */
+    public function updateCampaign(UpdateCampaignRequest $request, $id)
     {
         $user = Auth::user();
 
@@ -75,10 +81,8 @@ class CampaignController extends Controller
 
         $data = $request->validated();
 
-        // 🔥 منع تعديل بداية الحملة
         unset($data['start_date']);
 
-        // 🔥 التحقق من أن end_date أكبر من اليوم
         if (isset($data['end_date'])) {
             if (Carbon::parse($data['end_date'])->lte(now())) {
                 return response()->json([
@@ -107,6 +111,11 @@ class CampaignController extends Controller
         ], 200);
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | DELETE CAMPAIGN
+    |--------------------------------------------------------------------------
+    */
     public function deleteCampaign($id)
     {
         $user = Auth::user();
@@ -123,7 +132,7 @@ class CampaignController extends Controller
         if (!$campaign) {
             return response()->json([
                 'success' => false,
-
+                'message' => 'Campaign not found.'
             ], 404);
         }
 
@@ -134,6 +143,12 @@ class CampaignController extends Controller
             'message' => 'Campaign deleted successfully.'
         ], 200);
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | CLOSE CAMPAIGN
+    |--------------------------------------------------------------------------
+    */
     public function closeCampaign($id)
     {
         $user = Auth::user();
@@ -171,62 +186,13 @@ class CampaignController extends Controller
         ], 200);
     }
 
-    public function volunteerForCampaign(VolunteerForCampaignRequest $request, $campaignId)
-    {
-        $user = Auth::user();
+   
 
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You must be logged in to volunteer.'
-            ], 401);
-        }
-
-        // إنشاء ملف متطوع تلقائيًا إذا غير موجود
-        if (!$user->volunteer) {
-            $volunteer = Volunteer::create([
-                'user_id' => $user->id,
-                'skills' => null,
-                'description' => null,
-                'status' => 'active',
-            ]);
-        } else {
-            $volunteer = $user->volunteer;
-        }
-
-        $campaign = Campaign::find($campaignId);
-
-        if (!$campaign) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Campaign not found.'
-            ], 404);
-        }
-
-        // منع التطوع المكرر
-        $already = $campaign->volunteers()
-            ->where('volunteer_id', $volunteer->id)
-            ->exists();
-
-        if ($already) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You have already volunteered for this campaign.'
-            ], 409);
-        }
-
-        // ربط المتطوع بالحملة
-        $campaign->volunteers()->attach($volunteer->id, [
-            'status' => 'pending',
-            'assigned_date' => null,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Volunteer request submitted successfully.',
-        ], 201);
-    }
-
+    /*
+    |--------------------------------------------------------------------------
+    | GET CAMPAIGN DETAILS
+    |--------------------------------------------------------------------------
+    */
     public function getCampaignDetails($id)
     {
         $campaign = Campaign::with(['media', 'admin'])->find($id);
@@ -238,13 +204,6 @@ class CampaignController extends Controller
             ], 404);
         }
 
-        // نسبة التقدم
-        $progress = $campaign->progress;
-
-        // الوقت المتبقي
-        $timeRemaining = $campaign->time_remaining;
-
-        // عدد المتطوعين المقبولين فقط
         $approvedVolunteers = $campaign->volunteers()
             ->wherePivot('status', 'approved')
             ->count();
@@ -256,37 +215,114 @@ class CampaignController extends Controller
                 'title' => $campaign->title,
                 'description' => $campaign->description,
                 'type' => $campaign->type,
+                'participation_type' => $campaign->participation_type,
+                'accepts_donations' => $campaign->acceptsDonations(),
+                'accepts_volunteers' => $campaign->acceptsVolunteers(),
                 'status' => $campaign->status,
+                'amount_needed' => $campaign->amount_needed,
+                'amount_collected' => $campaign->amount_collected,
+                'volunteers_needed' => $campaign->volunteers_needed,
                 'start_date' => $campaign->start_date,
                 'end_date' => $campaign->end_date,
-                'progress' => $progress,
-                'time_remaining' => $timeRemaining,
+                'progress' => $campaign->progress,
+                'time_remaining' => $campaign->time_remaining,
                 'approved_volunteers_count' => $approvedVolunteers,
+                'media' => $campaign->media,
             ]
         ], 200);
     }
-    public function getActiveCampaigns()
+
+    /*
+    |--------------------------------------------------------------------------
+    | GET ALL CAMPAIGNS — مع فلترة
+    |--------------------------------------------------------------------------
+    */
+    public function getCampaigns(Request $request)
     {
-        $campaigns = Campaign::where('status', '!=', 'closed')
-            ->with(['media', 'admin'])
-            ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function ($campaign) {
-                return [
-                    'id' => $campaign->id,
-                    'title' => $campaign->title,
-                    'type' => $campaign->type,
-                    'status' => $campaign->status,
-                    'progress' => $campaign->progress,
-                    'time_remaining' => $campaign->time_remaining,
-                    'volunteers_count' => $campaign->volunteers()->count(),
-                ];
-            });
+        $query = Campaign::with(['media', 'admin']);
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->type);
+        }
+
+        // 🔥 فلترة حسب نوع المشاركة
+        if ($request->filled('participation_type')) {
+            $query->where('participation_type', $request->participation_type);
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        } else {
+            $query->whereNotIn('status', ['closed', 'cancelled', 'expired']);
+        }
+
+        if ($request->filled('search')) {
+            $query->where('title', 'like', '%' . $request->search . '%');
+        }
+
+        $sortBy = $request->get('sort_by', 'created_at');
+        $sortDir = $request->get('sort_dir', 'desc');
+        $query->orderBy($sortBy, $sortDir);
+
+        $campaigns = $query->paginate($request->get('per_page', 10));
+
+        $campaigns->getCollection()->transform(function ($campaign) {
+            return [
+                'id' => $campaign->id,
+                'title' => $campaign->title,
+                'type' => $campaign->type,
+                'participation_type' => $campaign->participation_type,
+                'accepts_donations' => $campaign->acceptsDonations(),
+                'accepts_volunteers' => $campaign->acceptsVolunteers(),
+                'status' => $campaign->status,
+                'amount_needed' => $campaign->amount_needed,
+                'amount_collected' => $campaign->amount_collected,
+                'progress' => $campaign->progress,
+                'time_remaining' => $campaign->time_remaining,
+                'volunteers_needed' => $campaign->volunteers_needed,
+                'volunteers_joined' => $campaign->volunteers_joined,
+                'media' => $campaign->media,
+            ];
+        });
 
         return response()->json([
             'success' => true,
             'campaigns' => $campaigns
         ], 200);
     }
-   
+
+    /*
+    |--------------------------------------------------------------------------
+    | GET CAMPAIGN TYPES
+    |--------------------------------------------------------------------------
+    */
+    public function getCampaignTypes()
+    {
+        return response()->json([
+            'success' => true,
+            'types' => [
+                'educational',
+                'medical',
+                'humanitarian',
+                'environmental',
+            ],
+        ], 200);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | GET PARTICIPATION TYPES (جديد) — مفيد للفرونت
+    |--------------------------------------------------------------------------
+    */
+    public function getParticipationTypes()
+    {
+        return response()->json([
+            'success' => true,
+            'participation_types' => [
+                'donation_only',
+                'volunteer_only',
+                'donation_and_volunteer',
+            ],
+        ], 200);
+    }
 }

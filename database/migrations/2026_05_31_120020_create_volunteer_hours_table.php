@@ -11,6 +11,10 @@ return new class extends Migration
         Schema::create('volunteer_hours', function (Blueprint $table) {
             $table->id();
             $table->foreignId('volunteer_id')->constrained('volunteers')->cascadeOnDelete();
+
+            // 🔥 ربط الساعات بحملة معينة (مفيد لمعرفة وين تطوع الشخص بالضبط)
+            $table->foreignId('campaign_id')->nullable()->constrained('campaigns')->nullOnDelete();
+
             $table->date('date');
             $table->decimal('hours', 5, 2)->default(0);
             $table->text('activity_description')->nullable();

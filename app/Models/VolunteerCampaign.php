@@ -19,6 +19,8 @@ class VolunteerCampaign extends Pivot
         'campaign_id',
         'assigned_date',
         'status',
+        'available_time',
+        'notes',
     ];
 
     protected $casts = [

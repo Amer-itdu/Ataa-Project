@@ -89,7 +89,7 @@ class DonationController extends Controller
 
 
     // ================================
-    public function donate(DonateRequest $request)
+    public function donate(DonateRequest $request, $type, $id)
     {
         $user = User::find(Auth::id());
 
@@ -101,21 +101,33 @@ class DonationController extends Controller
             return response()->json(['success' => false, 'message' => 'Admins cannot donate.'], 403);
         }
 
-        $validated = $request->validated();
+        $validated   = $request->validated();
         $amountInUSD = User::convertToUSD($validated['amount'], $validated['currency']);
 
-        // خصم الرصيد أولاً
+        // خصم الرصيد أولاً (موحّد للحالتين)
         if (!$user->subtractBalance($validated['currency'], $validated['amount'])) {
             return response()->json(['success' => false, 'message' => 'Insufficient balance.'], 400);
         }
 
-        return $validated['donationable_type'] === 'campaign'
-            ? $this->donateToCampaign($user, $validated, $amountInUSD)
-            : $this->donateToRequest($user, $validated, $amountInUSD);
+        return match ($type) {
+            'request'  => $this->donateToRequest($user, $validated, $amountInUSD, $id),
+            'campaign' => $this->donateToCampaign($user, $validated, $amountInUSD, $id),
+            default    => $this->refundAndFail($user, $validated, 'Invalid donation type.'),
+        };
     }
-    private function donateToRequest($user, $validated, $amountInUSD)
+
+    /*
+    |--------------------------------------------------------------------------
+    | DONATE TO REQUEST (case) — خاصة، بتنادى من donate() فقط
+    |--------------------------------------------------------------------------
+    */
+    private function donateToRequest($user, $validated, $amountInUSD, $id)
     {
-        $requestModel = RequestModel::findOrFail($validated['id']);
+        $requestModel = RequestModel::find($id);
+
+        if (!$requestModel) {
+            return $this->refundAndFail($user, $validated, 'Request not found.');
+        }
 
         $target = match ($requestModel->request_type) {
             'patient'    => $requestModel->patient,
@@ -126,8 +138,7 @@ class DonationController extends Controller
         };
 
         if (!$target) {
-            $user->addBalance($validated['currency'], $validated['amount']);
-            return response()->json(['success' => false, 'message' => 'Invalid request type.'], 400);
+            return $this->refundAndFail($user, $validated, 'Invalid request type.');
         }
 
         $donatedBefore = $target->donations()->sum('amount');
@@ -135,16 +146,13 @@ class DonationController extends Controller
         $amountToUse   = min($amountInUSD, $remaining);
         $extra         = $amountInUSD - $amountToUse;
 
-        // إضافة رصيد لصاحب الحالة
         $requestModel->user->addBalance('USD', $amountToUse);
 
-        // إرجاع الزيادة
         if ($extra > 0) {
             $user->addBalance('USD', $extra);
         }
 
-        // إنشاء donor إن لم يكن موجوداً
-        $donor = $user->getOrCreateDonor();
+        $donor = $user->donor ?? Donor::create(['user_id' => $user->id, 'anonymous' => false]);
 
         $donation = $target->donations()->create([
             'donor_id'          => $donor->id,
@@ -171,32 +179,38 @@ class DonationController extends Controller
             'extra_returned_to_donor_usd' => $extra,
         ]);
     }
-    private function donateToCampaign($user, $validated, $amountInUSD)
-    {
-        $campaign = Campaign::findOrFail($validated['id']);
 
-        // السماح بالتبرع فقط إذا كانت الحملة مفتوحة أو اكتمل التطوع فقط
-        if (!in_array($campaign->status, ['open', 'completed_volunteers'])) {
-            $user->addBalance($validated['currency'], $validated['amount']);
-            return response()->json([
-                'success' => false,
-                'message' => 'Campaign is not active for donations.'
-            ], 400);
+    /*
+    |--------------------------------------------------------------------------
+    | DONATE TO CAMPAIGN — خاصة، بتنادى من donate() فقط
+    |--------------------------------------------------------------------------
+    */
+    private function donateToCampaign($user, $validated, $amountInUSD, $id)
+    {
+        $campaign = Campaign::find($id);
+
+        if (!$campaign) {
+            return $this->refundAndFail($user, $validated, 'Campaign not found.');
+        }
+
+        if (!$campaign->acceptsDonations()) {
+            return $this->refundAndFail($user, $validated, 'This campaign does not accept donations.');
+        }
+
+        if ($campaign->status !== 'open') {
+            return $this->refundAndFail($user, $validated, 'Campaign is not active.');
         }
 
         $remaining   = $campaign->amount_needed - $campaign->amount_collected;
         $amountToUse = min($amountInUSD, $remaining);
         $extra       = $amountInUSD - $amountToUse;
 
-        // إرجاع الزيادة للمتبرع
         if ($extra > 0) {
             $user->addBalance('USD', $extra);
         }
 
-        // إنشاء donor إن لم يكن موجوداً
-        $donor = $user->getOrCreateDonor();
+        $donor = $user->donor ?? Donor::create(['user_id' => $user->id, 'anonymous' => false]);
 
-        // تسجيل التبرع
         $donation = $campaign->donations()->create([
             'donor_id'          => $donor->id,
             'amount'            => $amountToUse,
@@ -205,35 +219,55 @@ class DonationController extends Controller
             'original_currency' => $validated['currency'],
         ]);
 
-        // تحديث المبلغ المجموع
         $campaign->increment('amount_collected', $amountToUse);
         $campaign->refresh();
 
-        // فحص اكتمال الحملة (تبرعات + متطوعين)
         $this->checkCampaignCompletion($campaign);
+
+        $required = $campaign->amount_needed;
+        $donated  = $campaign->amount_collected;
 
         return response()->json([
             'success'                     => true,
             'message'                     => 'Donation to campaign completed successfully.',
             'donation_id'                 => $donation->id,
-            'donated_amount'              => $campaign->amount_collected,
-            'required_amount'             => $campaign->amount_needed,
-            'progress_percentage'         => round(($campaign->amount_collected / $campaign->amount_needed) * 100, 2),
+            'donated_amount'              => $donated,
+            'required_amount'             => $required,
+            'progress_percentage'         => $required > 0 ? round(($donated / $required) * 100, 2) : 0,
             'extra_returned_to_donor_usd' => $extra,
-            'campaign_status'             => $campaign->status,
         ]);
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | HELPER: إرجاع الرصيد + رسالة فشل (تجنب تكرار الكود)
+    |--------------------------------------------------------------------------
+    */
+    private function refundAndFail($user, $validated, $message)
+    {
+        $user->addBalance($validated['currency'], $validated['amount']);
+
+        return response()->json(['success' => false, 'message' => $message], 400);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | HELPER: تحديث حالة الحملة تلقائياً
+    |--------------------------------------------------------------------------
+    */
     private function checkCampaignCompletion(Campaign $campaign)
     {
-        $donationsDone  = $campaign->amount_collected >= $campaign->amount_needed;
-        $volunteersDone = $campaign->volunteers_joined >= $campaign->volunteers_needed;
+        $donationsDone  = $campaign->amount_needed !== null
+            && $campaign->amount_collected >= $campaign->amount_needed;
+
+        $volunteersDone = $campaign->volunteers_needed !== null
+            && $campaign->volunteers_joined >= $campaign->volunteers_needed;
 
         if ($donationsDone && $volunteersDone) {
             $campaign->update(['status' => 'completed_all']);
-        } elseif ($donationsDone) {
+        } elseif ($donationsDone && $campaign->acceptsDonations() && !$campaign->acceptsVolunteers()) {
             $campaign->update(['status' => 'completed_donations']);
-        } elseif ($volunteersDone) {
+        } elseif ($volunteersDone && $campaign->acceptsVolunteers() && !$campaign->acceptsDonations()) {
             $campaign->update(['status' => 'completed_volunteers']);
         }
     }
