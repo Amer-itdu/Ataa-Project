@@ -31,6 +31,7 @@ class UpdateProfileRequest extends FormRequest
             'profile_image' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
             'national_id' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
             'international_passport' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            
 
 
         ];
