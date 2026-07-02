@@ -483,9 +483,7 @@ class RequestController extends Controller
                     'university' => $req->universityStudent,
                 };
 
-                $donated = $target->donations()
-                    ->where('status', 'approved')
-                    ->sum('amount');
+                $donated = $target->donations()->sum('amount');
 
                 $required = $req->required_amount;
 
@@ -519,7 +517,7 @@ class RequestController extends Controller
 
                 $target = $req->patient;
 
-                $donated = $target->donations()->where('status', 'approved')->sum('amount');
+                $donated = $target->donations()->sum('amount');
                 $required = $req->required_amount;
 
                 $req->donated_amount = $donated;
@@ -543,7 +541,7 @@ class RequestController extends Controller
 
                 $target = $req->orphan;
 
-                $donated = $target->donations()->where('status', 'approved')->sum('amount');
+                $donated = $target->donations()->sum('amount');
                 $required = $req->required_amount;
 
                 $req->donated_amount = $donated;
@@ -567,7 +565,7 @@ class RequestController extends Controller
 
                 $target = $req->schoolStudent;
 
-                $donated = $target->donations()->where('status', 'approved')->sum('amount');
+                $donated = $target->donations()->sum('amount');
                 $required = $req->required_amount;
 
                 $req->donated_amount = $donated;
@@ -591,7 +589,7 @@ class RequestController extends Controller
 
                 $target = $req->universityStudent;
 
-                $donated = $target->donations()->where('status', 'approved')->sum('amount');
+                $donated = $target->donations()->sum('amount');
                 $required = $req->required_amount;
 
                 $req->donated_amount = $donated;
@@ -602,6 +600,84 @@ class RequestController extends Controller
             });
 
         return response()->json($requests);
+    }
+    public function filterRequests(\Illuminate\Http\Request $httpRequest)
+    {
+        $httpRequest->validate([
+            'request_type'    => 'nullable|in:patient,orphan,school,university',
+            'status'          => 'nullable|in:pending,accepted,rejected',
+            'status_request'  => 'nullable|in:open,closed',
+            'governorate_id'  => 'nullable|integer|exists:governorates,id',
+            'region_id'       => 'nullable|integer|exists:regions,id',
+        ]);
+
+        $query = RequestModel::with([
+            'beneficiary.governorate',
+            'beneficiary.region',
+            'patient.donations',
+            'orphan.donations',
+            'schoolStudent.donations',
+            'universityStudent.donations'
+        ]);
+
+        if ($httpRequest->filled('status')) {
+            $query->where('status', $httpRequest->status);
+        }
+
+        if ($httpRequest->filled('status_request')) {
+            $query->where('status_request', $httpRequest->status_request);
+        }
+
+        if ($httpRequest->filled('request_type')) {
+            $query->where('request_type', $httpRequest->request_type);
+        }
+
+        if ($httpRequest->filled('governorate_id')) {
+            $query->whereHas('beneficiary', function ($q) use ($httpRequest) {
+                $q->where('governorate_id', $httpRequest->governorate_id);
+            });
+        }
+
+        if ($httpRequest->filled('region_id')) {
+            $query->whereHas('beneficiary', function ($q) use ($httpRequest) {
+                $q->where('region_id', $httpRequest->region_id);
+            });
+        }
+
+        $requests = $query->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($req) {
+
+                $target = match ($req->request_type) {
+                    'patient'    => $req->patient,
+                    'orphan'     => $req->orphan,
+                    'school'     => $req->schoolStudent,
+                    'university' => $req->universityStudent,
+                    default      => null,
+                };
+
+                if (!$target) {
+                    $req->donated_amount = 0;
+                    $req->remaining_amount = $req->required_amount;
+                    $req->progress_percentage = 0;
+                    return $req;
+                }
+
+                $donated  = $target->donations()->sum('amount');
+                $required = $req->required_amount;
+
+                $req->donated_amount = $donated;
+                $req->remaining_amount = max($required - $donated, 0);
+                $req->progress_percentage = $required > 0 ? round(($donated / $required) * 100, 2) : 0;
+
+                return $req;
+            });
+
+        return response()->json([
+            'success' => true,
+            'count'   => $requests->count(),
+            'data'    => $requests
+        ]);
     }
 
     /*

@@ -503,6 +503,38 @@ class UserController extends Controller
             'user' => $user
         ], 200);
     }
+    public function setRejected($id)
+    {
+        $user = User::find($id);
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found.',
+            ], 404);
+        }
+
+        // إذا هو أصلاً rejected
+        if ($user->status === 'rejected') {
+            return response()->json([
+                'success' => false,
+                'message' => 'User is already rejected.',
+            ], 400);
+        }
+
+        // 🔥 تحويل الحالة إلى rejected
+        $user->update([
+            'status' => 'rejected'
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'User status changed to rejected successfully.',
+            'user' => $user
+        ], 200);
+    }
+
+
     public function getAllPendingUsers()
     {
         $users = User::where('status', 'pending')->get();
@@ -567,7 +599,7 @@ class UserController extends Controller
             'message' => 'Password changed successfully.',
         ], 200);
     }
-    
+
     public function promoteUser(PromoteUserRequest $request, $id)
     {
         $authUser = Auth::user();
@@ -648,7 +680,7 @@ class UserController extends Controller
         ], 200);
     }
 
-    
+
     public function listByRole($role)
     {
         if (!in_array($role, ['admin', 'sub_admin', 'field_worker', 'user'])) {

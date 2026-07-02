@@ -50,11 +50,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('getpendingorphans', [RequestController::class, 'getPendingOrphans']);
         Route::get('getpendingschools', [RequestController::class, 'getPendingSchool']);
         Route::get('getpendinguniversities', [RequestController::class, 'getPendingUniversity']);
-        Route::get('getopenacceptedrequests', [RequestController::class, 'getOpenAcceptedRequests']);
-        Route::get('getopenacceptedpatients', [RequestController::class, 'getOpenAcceptedPatients']);
-        Route::get('getopenacceptedorphans', [RequestController::class, 'getOpenAcceptedOrphans']);
-        Route::get('getopenacceptedschools', [RequestController::class, 'getOpenAcceptedSchoolStudents']);
-        Route::get('getopenaccepteduniversities', [RequestController::class, 'getOpenAcceptedUniversityStudents']);
+
         Route::put('closeRequest/{id}', [RequestController::class, 'closeRequest']);
         Route::put('acceptRequest/{id}', [RequestController::class, 'acceptRequest']);
     });
@@ -126,6 +122,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/createEmployee', [UserController::class, 'createEmployee']);
     Route::post('/approveUser/{id}', [UserController::class, 'approveUser']);
     Route::post('/setPending/{id}', [UserController::class, 'setPending']);
+
     Route::get('/getAllPendingUsers', [UserController::class, 'getAllPendingUsers']);
     Route::get('/getAllNonUserAccounts', [UserController::class, 'getAllNonUserAccounts']);
     Route::post('/changePassword', [UserController::class, 'changePassword']);
@@ -138,6 +135,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/getUserById/{id}', [UserController::class, 'getUserById']);
     Route::get('/getAllUsers', [UserController::class, 'getallUsers']);
     Route::post('/addBalanceToUser/{userId}', [UserController::class, 'addBalanceToUser']);
+    //new
+    Route::post('/setRejected/{id}', [UserController::class, 'setRejected']);
+    Route::delete('/deleteUser/{id}', [UserController::class, 'deleteUser']);
+    Route::post('/userprofile/update', [UserController::class, 'updateProfile']);
 });
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('storepatient', [RequestController::class, 'storePatientRequest']);
@@ -149,8 +150,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('getpendingorphans', [RequestController::class, 'getPendingOrphans']);
     Route::get('getpendingschools', [RequestController::class, 'getPendingSchool']);
     Route::get('getpendinguniversities', [RequestController::class, 'getPendingUniversity']);
+
     Route::put('closeRequest/{id}', [RequestController::class, 'closeRequest']);
     Route::put('acceptRequest/{id}', [RequestController::class, 'acceptRequest']);
+    //new 
+    Route::get('getopenacceptedrequests', [RequestController::class, 'getOpenAcceptedRequests']);
+    Route::get('getopenacceptedpatients', [RequestController::class, 'getOpenAcceptedPatients']);
+    Route::get('getopenacceptedorphans', [RequestController::class, 'getOpenAcceptedOrphans']);
+    Route::get('getopenacceptedschools', [RequestController::class, 'getOpenAcceptedSchoolStudents']);
+    Route::get('getopenaccepteduniversities', [RequestController::class, 'getOpenAcceptedUniversityStudents']);
+    Route::get('filterRequests', [RequestController::class, 'filterRequests']);
 });
 Route::middleware(['auth:sanctum'])->group(function () {
     //statistics and KPIs
