@@ -15,26 +15,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
-// Public authentication routes 
-//User routes
 
 Route::post('/signup', [UserController::class, 'signUp']);
 Route::post('/signin', [UserController::class, 'signIn']);
-
-
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/signout', [UserController::class, 'signOut']);
     Route::get('/userprofile', [UserController::class, 'profile']);
     Route::post('/userprofile/update', [UserController::class, 'updateProfile']);
-    //Amer
-    //status management for users by admin and sub_admin    
-
-    //dashbored
-
-    Route::get('/myDonationsFull', [UserController::class, 'myDonationsFull']);
-    //dashboard
-
-
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
@@ -76,19 +63,14 @@ Route::delete('/beneficiaries/delete/{id}', [BeneficiaryController::class, 'dest
 
 
 Route::get('getCampaignDetails/{id}', [CampaignController::class, 'getCampaignDetails']);
-Route::middleware(['auth:sanctum'])->group(function () {
-    Route::post('/storecampaign', [CampaignController::class, 'createCampaign']);
-    Route::put('/updatecampaign/{id}', [CampaignController::class, 'updateCampaign']);
-    Route::delete('/deletecampaign/{id}', [CampaignController::class, 'deleteCampaign']);
-    Route::patch('/closecampaign/{id}', [CampaignController::class, 'closeCampaign']);
-    Route::get('getParticipationTypes', [CampaignController::class, 'getParticipationTypes']);
-});
+
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/quickDonate', [DonationController::class, 'quickDonateToAssociation']);
     Route::post('/donate/{type}/{id}', [DonationController::class, 'donate'])
         ->where('type', 'request|campaign');
     Route::get('/mydonations', [DonationController::class, 'myDonationsSummary']);
+    Route::get('/myDonationsFull', [UserController::class, 'myDonationsFull']);
 });
 // routes/api.php
 Route::middleware('auth:sanctum')->group(function () {
@@ -141,10 +123,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/userprofile/update', [UserController::class, 'updateProfile']);
 });
 Route::middleware(['auth:sanctum'])->group(function () {
+    //salam
     Route::post('storepatient', [RequestController::class, 'storePatientRequest']);
     Route::post('storeorphan', [RequestController::class, 'storeOrphanRequest']);
     Route::post('storeschool', [RequestController::class, 'storeSchoolRequest']);
     Route::post('storeuniversity', [RequestController::class, 'storeUniversityRequest']);
+    Route::get('/governorates', [LocationController::class, 'getGovernorates']);
+    Route::get('/governorates/{id}/regions', [LocationController::class, 'getRegions']);
+    //salam
     Route::get('getpendingrequests', [RequestController::class, 'getPendingRequests']);
     Route::get('getpendingpatients', [RequestController::class, 'getPendingPatients']);
     Route::get('getpendingorphans', [RequestController::class, 'getPendingOrphans']);
@@ -153,7 +139,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::put('closeRequest/{id}', [RequestController::class, 'closeRequest']);
     Route::put('acceptRequest/{id}', [RequestController::class, 'acceptRequest']);
-    //new 
+
     Route::get('getopenacceptedrequests', [RequestController::class, 'getOpenAcceptedRequests']);
     Route::get('getopenacceptedpatients', [RequestController::class, 'getOpenAcceptedPatients']);
     Route::get('getopenacceptedorphans', [RequestController::class, 'getOpenAcceptedOrphans']);
@@ -172,3 +158,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
 });
 Route::get('/governorates', [LocationController::class, 'getGovernorates']);
 Route::get('/governorates/{id}/regions', [LocationController::class, 'getRegions']);
+
+//new 
+//campaings for sedra
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('/storecampaign', [CampaignController::class, 'createCampaign']);
+    Route::put('/updatecampaign/{id}', [CampaignController::class, 'updateCampaign']);
+    Route::delete('/deletecampaign/{id}', [CampaignController::class, 'deleteCampaign']);
+    Route::patch('/closecampaign/{id}', [CampaignController::class, 'closeCampaign']);
+    Route::get('getParticipationTypes', [CampaignController::class, 'getParticipationTypes']);
+    Route::get('/campaignsfilter', [CampaignController::class, 'filterCampaigns']);
+    Route::get('/campaigns', [CampaignController::class, 'getCampaigns']);
+    Route::get('/campaigns/types', [CampaignController::class, 'getCampaignTypes']);
+    Route::get('/campaigns/{id}', [CampaignController::class, 'getCampaignDetails']);
+});

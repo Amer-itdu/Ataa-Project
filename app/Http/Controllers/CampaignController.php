@@ -186,7 +186,7 @@ class CampaignController extends Controller
         ], 200);
     }
 
-   
+
 
     /*
     |--------------------------------------------------------------------------
@@ -323,6 +323,112 @@ class CampaignController extends Controller
                 'volunteer_only',
                 'donation_and_volunteer',
             ],
+        ], 200);
+    }
+
+    public function filterCampaigns(Request $request)
+    {
+        $request->validate([
+            'type'                => 'nullable|in:educational,medical,humanitarian,environmental',
+            'participation_type'  => 'nullable|in:donation_only,volunteer_only,donation_and_volunteer',
+            'status'               => 'nullable|in:open,closed,completed_donations,completed_volunteers,completed_all,expired,paused,cancelled',
+            'search'               => 'nullable|string|max:255',
+            'min_amount_needed'    => 'nullable|numeric|min:0',
+            'max_amount_needed'    => 'nullable|numeric|min:0',
+            'start_date_from'      => 'nullable|date',
+            'start_date_to'        => 'nullable|date',
+            'end_date_from'        => 'nullable|date',
+            'end_date_to'          => 'nullable|date',
+            'sort_by'               => 'nullable|in:created_at,amount_needed,amount_collected,start_date,end_date,title',
+            'sort_dir'              => 'nullable|in:asc,desc',
+            'per_page'              => 'nullable|integer|min:1|max:100',
+        ]);
+
+        $query = Campaign::with(['media', 'admin']);
+
+        // 🔥 فلترة حسب نوع الحملة
+        if ($request->filled('type')) {
+            $query->where('type', $request->type);
+        }
+
+        // 🔥 فلترة حسب نوع المشاركة
+        if ($request->filled('participation_type')) {
+            $query->where('participation_type', $request->participation_type);
+        }
+
+        // 🔥 فلترة حسب حالة الحملة
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // 🔥 بحث بالعنوان أو الوصف
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        // 🔥 فلترة حسب نطاق المبلغ المطلوب
+        if ($request->filled('min_amount_needed')) {
+            $query->where('amount_needed', '>=', $request->min_amount_needed);
+        }
+
+        if ($request->filled('max_amount_needed')) {
+            $query->where('amount_needed', '<=', $request->max_amount_needed);
+        }
+
+        // 🔥 فلترة حسب نطاق تاريخ البداية
+        if ($request->filled('start_date_from')) {
+            $query->whereDate('start_date', '>=', $request->start_date_from);
+        }
+
+        if ($request->filled('start_date_to')) {
+            $query->whereDate('start_date', '<=', $request->start_date_to);
+        }
+
+        // 🔥 فلترة حسب نطاق تاريخ النهاية
+        if ($request->filled('end_date_from')) {
+            $query->whereDate('end_date', '>=', $request->end_date_from);
+        }
+
+        if ($request->filled('end_date_to')) {
+            $query->whereDate('end_date', '<=', $request->end_date_to);
+        }
+
+        // 🔥 الترتيب
+        $sortBy  = $request->get('sort_by', 'created_at');
+        $sortDir = $request->get('sort_dir', 'desc');
+        $query->orderBy($sortBy, $sortDir);
+
+        $campaigns = $query->paginate($request->get('per_page', 10));
+
+        $campaigns->getCollection()->transform(function ($campaign) {
+            return [
+                'id'                 => $campaign->id,
+                'title'              => $campaign->title,
+                'description'        => $campaign->description,
+                'type'               => $campaign->type,
+                'participation_type' => $campaign->participation_type,
+                'accepts_donations'  => $campaign->acceptsDonations(),
+                'accepts_volunteers' => $campaign->acceptsVolunteers(),
+                'status'             => $campaign->status,
+                'amount_needed'      => $campaign->amount_needed,
+                'amount_collected'   => $campaign->amount_collected,
+                'progress'           => $campaign->progress,
+                'time_remaining'     => $campaign->time_remaining,
+                'volunteers_needed'  => $campaign->volunteers_needed,
+                'volunteers_joined'  => $campaign->volunteers_joined,
+                'start_date'         => $campaign->start_date,
+                'end_date'           => $campaign->end_date,
+                'media'              => $campaign->media,
+            ];
+        });
+
+        return response()->json([
+            'success'   => true,
+            'campaigns' => $campaigns
         ], 200);
     }
 }

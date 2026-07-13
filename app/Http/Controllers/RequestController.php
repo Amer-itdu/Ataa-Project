@@ -8,9 +8,11 @@ use App\Http\Requests\StoreSchoolRequest;
 use App\Http\Requests\StoreUniversityRequest;
 use App\Http\Requests\AcceptRequestRequest;
 use App\Models\Beneficiary;
+use App\Models\Governorate;
 use App\Models\Orphan;
-use App\Models\RequestModel;
 use App\Models\Patient;
+use App\Models\Region;
+use App\Models\RequestModel;
 use App\Models\SchoolStudent;
 use App\Models\UniversityStudent;
 use Illuminate\Support\Facades\Auth;
@@ -18,7 +20,16 @@ use Illuminate\Support\Facades\Storage;
 
 class RequestController extends Controller
 {
-    /*
+    private function ensureCanCreateRequest($user)
+    {
+        if (! $user || ($user->role !== 'admin' && $user->user_category !== 'beneficiary')) {
+            return response()->json([
+                'message' => 'Only beneficiaries or admins can create requests.',
+            ], 403);
+        }
+
+        return null;
+    }/*
     |--------------------------------------------------------------------------
     | PATIENT REQUEST
     |--------------------------------------------------------------------------
@@ -26,6 +37,12 @@ class RequestController extends Controller
     public function storePatientRequest(StorePatientRequest $request)
     {
         $user = Auth::user();
+        $authorizationResponse = $this->ensureCanCreateRequest($user);
+
+        if ($authorizationResponse) {
+            return $authorizationResponse;
+        }
+
         $isAdmin = $user->role === 'admin';
 
         // 1) Beneficiary data
@@ -121,6 +138,12 @@ class RequestController extends Controller
     public function storeSchoolRequest(StoreSchoolRequest $request)
     {
         $user = Auth::user();
+        $authorizationResponse = $this->ensureCanCreateRequest($user);
+
+        if ($authorizationResponse) {
+            return $authorizationResponse;
+        }
+
         $isAdmin = $user->role === 'admin';
 
         // 1) Beneficiary
@@ -202,6 +225,12 @@ class RequestController extends Controller
     public function storeUniversityRequest(StoreUniversityRequest $request)
     {
         $user = Auth::user();
+        $authorizationResponse = $this->ensureCanCreateRequest($user);
+
+        if ($authorizationResponse) {
+            return $authorizationResponse;
+        }
+
         $isAdmin = $user->role === 'admin';
 
         // 1) Beneficiary
@@ -283,6 +312,12 @@ class RequestController extends Controller
     public function storeOrphanRequest(StoreOrphanRequest $request)
     {
         $user = Auth::user();
+        $authorizationResponse = $this->ensureCanCreateRequest($user);
+
+        if ($authorizationResponse) {
+            return $authorizationResponse;
+        }
+
         $isAdmin = $user->role === 'admin';
 
         // 1) بيانات المستفيد

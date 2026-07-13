@@ -534,24 +534,24 @@ class UserController extends Controller
         ], 200);
     }
     public function deleteUser($id)
-{
-    $user = User::find($id);
+    {
+        $user = User::find($id);
 
-    if (!$user) {
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found.',
+            ], 404);
+        }
+
+        // 🔥 حذف نهائي من قاعدة البيانات
+        $user->delete();
+
         return response()->json([
-            'success' => false,
-            'message' => 'User not found.',
-        ], 404);
+            'success' => true,
+            'message' => 'User deleted permanently.',
+        ], 200);
     }
-
-    // 🔥 حذف نهائي من قاعدة البيانات
-    $user->delete();
-
-    return response()->json([
-        'success' => true,
-        'message' => 'User deleted permanently.',
-    ], 200);
-}
 
 
 
