@@ -15,26 +15,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
-// Public authentication routes 
-//User routes
 
 Route::post('/signup', [UserController::class, 'signUp']);
 Route::post('/signin', [UserController::class, 'signIn']);
-
-
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/signout', [UserController::class, 'signOut']);
     Route::get('/userprofile', [UserController::class, 'profile']);
     Route::post('/userprofile/update', [UserController::class, 'updateProfile']);
-    //Amer
-    //status management for users by admin and sub_admin    
-
-    //dashbored
-
-    Route::get('/myDonationsFull', [UserController::class, 'myDonationsFull']);
-    //dashboard
-
-
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
@@ -76,41 +63,53 @@ Route::delete('/beneficiaries/delete/{id}', [BeneficiaryController::class, 'dest
 
 
 Route::get('getCampaignDetails/{id}', [CampaignController::class, 'getCampaignDetails']);
-Route::middleware(['auth:sanctum'])->group(function () {
-    Route::post('/storecampaign', [CampaignController::class, 'createCampaign']);
-    Route::put('/updatecampaign/{id}', [CampaignController::class, 'updateCampaign']);
-    Route::delete('/deletecampaign/{id}', [CampaignController::class, 'deleteCampaign']);
-    Route::patch('/closecampaign/{id}', [CampaignController::class, 'closeCampaign']);
-    Route::get('getParticipationTypes', [CampaignController::class, 'getParticipationTypes']);
-});
+
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/quickDonate', [DonationController::class, 'quickDonateToAssociation']);
     Route::post('/donate/{type}/{id}', [DonationController::class, 'donate'])
         ->where('type', 'request|campaign');
     Route::get('/mydonations', [DonationController::class, 'myDonationsSummary']);
+    Route::get('/myDonationsFull', [UserController::class, 'myDonationsFull']);
 });
 // routes/api.php
 Route::middleware('auth:sanctum')->group(function () {
 
-    // التطوع
-    Route::post('/volunteer/{campaignId}', [VolunteerController::class, 'volunteerForCampaign']);
-    //
-    Route::get('getCampaignPendingVolunteers/{campaignId}',  [VolunteerController::class, 'getCampaignPendingVolunteers']);
-    Route::get('getCampaignApprovedVolunteers/{campaignId}', [VolunteerController::class, 'getCampaignApprovedVolunteers']);
-    Route::get('getCampaignRejectedVolunteers/{campaignId}', [VolunteerController::class, 'getCampaignRejectedVolunteers']);
-    //
-    Route::get('getCampaignVolunteers/{campaignId}', [VolunteerController::class, 'getCampaignVolunteers']);
-    Route::patch('updateVolunteerStatus/{campaignId}/{volunteerId}', [VolunteerController::class, 'updateVolunteerStatus']);
+    // نموذج التطوع العام
+    Route::post('/volunteer/apply', [VolunteerController::class, 'submitVolunteerApplication']);
+    Route::get('/volunteer/me',     [VolunteerController::class, 'getMyVolunteerApplication']);
+    Route::get('/volunteer/skills', [VolunteerController::class, 'getVolunteerSkillsList']);
 
-    // الحملات الخاصة بالمستخدم كمتطوع
-    Route::get('/myapprovedcampaigns', [VolunteerController::class, 'getMyApprovedCampaigns']);
-    Route::get('/mypendingcampaigns', [VolunteerController::class, 'getMyPendingCampaigns']);
+    // مراجعة طلبات التطوع العامة (أدمن) — لازم قبل route فيه {volunteerId}
+    Route::get('/volunteer-applications/pending',   [VolunteerController::class, 'getPendingVolunteerApplications']);
+    Route::get('/volunteer-applications/approved',  [VolunteerController::class, 'getApprovedVolunteerApplications']);
+    Route::get('/volunteer-applications/rejected',  [VolunteerController::class, 'getRejectedVolunteerApplications']);
+    Route::get('/volunteer-applications/suspended', [VolunteerController::class, 'getSuspendedVolunteerApplications']);
+    Route::get('/volunteer-applications/filter',    [VolunteerController::class, 'filterVolunteerApplications']);
+    // قبول/رفض طلبات التطوع العامة (أدمن)
+    Route::patch('/volunteer-applications/{volunteerId}', [VolunteerController::class, 'reviewVolunteerApplication']);
 
-    // ساعات العمل (field_worker فقط للإضافة)
-    Route::post('addVolunteerHours/{campaignId}/{volunteerId}', [VolunteerController::class, 'addVolunteerHours']);
-    Route::get('getVolunteerHoursInCampaign/{campaignId}/{volunteerId}', [VolunteerController::class, 'getVolunteerHoursInCampaign']);
-    Route::get('getMyVolunteerHours', [VolunteerController::class, 'getMyVolunteerHours']);
+    // التطوع لحملة
+    Route::post('/campaigns/volunteer/{campaignId}', [VolunteerController::class, 'volunteerForCampaign']);
+
+    // متطوعين حملة معينة حسب الحالة — لازم قبل route فيه {volunteerId}
+    Route::get('/campaigns/{campaignId}/volunteers/pending',  [VolunteerController::class, 'getCampaignPendingVolunteers']);
+    Route::get('/campaigns/{campaignId}/volunteers/approved', [VolunteerController::class, 'getCampaignApprovedVolunteers']);
+    Route::get('/campaigns/{campaignId}/volunteers/rejected', [VolunteerController::class, 'getCampaignRejectedVolunteers']);
+    Route::get('/campaigns/{campaignId}/volunteers', [VolunteerController::class, 'getCampaignVolunteers']);
+
+    // قبول/رفض متطوع بحملة (أدمن)
+    Route::patch('/campaigns/{campaignId}/volunteers/{volunteerId}', [VolunteerController::class, 'updateVolunteerStatus']);
+
+    // ساعات العمل
+    Route::post('/campaigns/{campaignId}/volunteers/{volunteerId}/hours', [VolunteerController::class, 'addVolunteerHours']);
+    Route::get('/campaigns/{campaignId}/volunteers/{volunteerId}/hours',  [VolunteerController::class, 'getVolunteerHoursInCampaign']);
+
+    // حملات/ساعات المستخدم الحالي
+    Route::get('/my-campaigns/approved', [VolunteerController::class, 'getMyApprovedCampaigns']);
+    Route::get('/my-campaigns/pending',  [VolunteerController::class, 'getMyPendingCampaigns']);
+    Route::get('/my-volunteer-hours',    [VolunteerController::class, 'getMyVolunteerHours']);
+    Route::get('/approved-general-volunteers', [VolunteerController::class, 'getApprovedGeneralVolunteerApplications']);
 });
 //Dashboard routes dashboard 
 //Dashboard routes
@@ -141,10 +140,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/userprofile/update', [UserController::class, 'updateProfile']);
 });
 Route::middleware(['auth:sanctum'])->group(function () {
+    //salam
     Route::post('storepatient', [RequestController::class, 'storePatientRequest']);
     Route::post('storeorphan', [RequestController::class, 'storeOrphanRequest']);
     Route::post('storeschool', [RequestController::class, 'storeSchoolRequest']);
     Route::post('storeuniversity', [RequestController::class, 'storeUniversityRequest']);
+    Route::get('/governorates', [LocationController::class, 'getGovernorates']);
+    Route::get('/governorates/{id}/regions', [LocationController::class, 'getRegions']);
+    //salam
     Route::get('getpendingrequests', [RequestController::class, 'getPendingRequests']);
     Route::get('getpendingpatients', [RequestController::class, 'getPendingPatients']);
     Route::get('getpendingorphans', [RequestController::class, 'getPendingOrphans']);
@@ -153,7 +156,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::put('closeRequest/{id}', [RequestController::class, 'closeRequest']);
     Route::put('acceptRequest/{id}', [RequestController::class, 'acceptRequest']);
-    //new 
+    //marwa
     Route::get('getopenacceptedrequests', [RequestController::class, 'getOpenAcceptedRequests']);
     Route::get('getopenacceptedpatients', [RequestController::class, 'getOpenAcceptedPatients']);
     Route::get('getopenacceptedorphans', [RequestController::class, 'getOpenAcceptedOrphans']);
@@ -172,3 +175,34 @@ Route::middleware(['auth:sanctum'])->group(function () {
 });
 Route::get('/governorates', [LocationController::class, 'getGovernorates']);
 Route::get('/governorates/{id}/regions', [LocationController::class, 'getRegions']);
+
+//new 
+//campaings for sedra
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('/storecampaign', [CampaignController::class, 'createCampaign']);
+    Route::put('/updatecampaign/{id}', [CampaignController::class, 'updateCampaign']);
+    Route::delete('/deletecampaign/{id}', [CampaignController::class, 'deleteCampaign']);
+    Route::patch('/closecampaign/{id}', [CampaignController::class, 'closeCampaign']);
+    Route::get('getParticipationTypes', [CampaignController::class, 'getParticipationTypes']);
+    Route::get('/campaignsfilter', [CampaignController::class, 'filterCampaigns']);
+    Route::get('/campaigns', [CampaignController::class, 'getCampaigns']);
+    Route::get('/campaigns/types', [CampaignController::class, 'getCampaignTypes']);
+    Route::get('/campaigns/{id}', [CampaignController::class, 'getCampaignDetails']);
+});
+//Marwa
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/campaignsfilter', [CampaignController::class, 'filterCampaigns']);
+});
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('getopenacceptedpatients', [RequestController::class, 'getOpenAcceptedPatients']);
+    Route::get('getopenacceptedorphans', [RequestController::class, 'getOpenAcceptedOrphans']);
+    Route::get('getopenacceptedschools', [RequestController::class, 'getOpenAcceptedSchoolStudents']);
+    Route::get('getopenaccepteduniversities', [RequestController::class, 'getOpenAcceptedUniversityStudents']);
+    Route::get('getopenacceptedrequests', [RequestController::class, 'getOpenAcceptedRequests']);
+    Route::get('filterRequests', [RequestController::class, 'filterRequests']);
+});
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('/quickDonate', [DonationController::class, 'quickDonateToAssociation']);
+    Route::post('/donate/{type}/{id}', [DonationController::class, 'donate'])
+        ->where('type', 'request|campaign');
+});

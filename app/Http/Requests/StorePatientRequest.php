@@ -10,7 +10,7 @@ class StorePatientRequest extends FormRequest
 {
     public function authorize()
     {
-        return true;
+        return $this->user() !== null;
     }
 
     public function rules()
@@ -19,10 +19,6 @@ class StorePatientRequest extends FormRequest
         $isAdmin = $user && $user->role === 'admin';
 
         return [
-
-            'is_self'   => $isAdmin
-                ? 'nullable|string|in:true,false'
-                : 'required|string|in:true,false',
 
             'full_name'      => 'required|string|max:255',
             'governorate_id' => 'required|exists:governorates,id',
@@ -35,11 +31,11 @@ class StorePatientRequest extends FormRequest
 
             'email' => $isAdmin
                 ? 'nullable|required_without:phone|email'
-                : 'nullable|email|required_without:phone|prohibited_if:is_self,true',
+                : 'nullable|email|required_without:phone',
 
             'phone' => $isAdmin
                 ? 'nullable|required_without:email|regex:/^[0-9]+$/'
-                : 'nullable|regex:/^[0-9]+$/|required_without:email|prohibited_if:is_self,true',
+                : 'nullable|regex:/^[0-9]+$/|required_without:email',
 
             'description' => 'required|string',
 

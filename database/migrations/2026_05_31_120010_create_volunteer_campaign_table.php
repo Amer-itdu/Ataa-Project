@@ -13,7 +13,7 @@ return new class extends Migration
             $table->foreignId('volunteer_id')->constrained('volunteers')->cascadeOnDelete();
             $table->foreignId('campaign_id')->constrained('campaigns')->cascadeOnDelete();
             $table->date('assigned_date')->nullable();
-            $table->string('status')->default('pending');
+            $table->enum('status', ['pending', 'approved', 'rejected', 'suspended'])->default('pending');
 
             // 🔥 بيانات خاصة بهذا التطوع المحدد لهذه الحملة
             $table->string('available_time')->nullable();

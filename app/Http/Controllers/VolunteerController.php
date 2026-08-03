@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\VolunteerForCampaignRequest;
 use App\Http\Requests\AddVolunteerHoursRequest;
+use App\Http\Requests\VolunteerApplicationRequest;
 use App\Models\Campaign;
 use App\Models\Volunteer;
 use App\Models\VolunteerHour;
@@ -11,8 +12,264 @@ use Illuminate\Support\Facades\Auth;
 
 class VolunteerController extends Controller
 {
+    /*
+    |--------------------------------------------------------------------------
+    | 1) تقديم طلب تطوع عام (نموذج التطوع)
+    |--------------------------------------------------------------------------
+    */
+    public function submitVolunteerApplication(VolunteerApplicationRequest $request)
+    {
+        $user = Auth::user();
 
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You must be logged in to apply.'
+            ], 401);
+        }
 
+        if ($user->role === 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Admins cannot submit volunteer applications.'
+            ], 403);
+        }
+
+        // فقط إذا كان عنده طلب عام سابق فعلاً بنمنعه
+        if ($user->volunteer && $user->volunteer->general_application) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You have already submitted a volunteer application.',
+                'status'  => $user->volunteer->status,
+            ], 409);
+        }
+
+        $validated = $request->validated();
+
+        // updateOrCreate: لو عنده سجل من تطوع لحملة سابقًا، نكمّله بدل ما نعمل تكرار
+        $volunteer = Volunteer::updateOrCreate(
+            ['user_id' => $user->id],
+            [
+                'phone'               => $validated['phone'],
+                'gender'              => $validated['gender'],
+                'occupation'          => $validated['occupation'] ?? null,
+                'governorate_id'      => $validated['governorate_id'],
+                'skills'              => $validated['skills'],
+                'availability'        => $validated['availability'] ?? null,
+                'description'         => $validated['description'],
+                'agreed_to_terms'     => true,
+                'agreed_to_terms_at'  => now(),
+                'status'              => Volunteer::normalizeStatus('pending'),
+                'general_application' => true,
+            ]
+        );
+
+        return response()->json([
+            'success'   => true,
+            'message'   => 'Your volunteer application has been submitted and is under review.',
+            'volunteer' => $volunteer,
+        ], 201);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 2) حالة طلب التطوع الخاص بالمستخدم الحالي
+    |--------------------------------------------------------------------------
+    */
+    public function getMyVolunteerApplication()
+    {
+        $user = Auth::user();
+
+        if (!$user || !$user->volunteer || !$user->volunteer->general_application) {
+            return response()->json([
+                'success'     => true,
+                'has_applied' => false,
+                'volunteer'   => null,
+            ], 200);
+        }
+
+        $volunteer = $user->volunteer->load('governorate');
+
+        return response()->json([
+            'success'       => true,
+            'has_applied'   => true,
+            'volunteer'     => $volunteer,
+            'skills_labels' => collect($volunteer->skills)
+                ->map(fn($key) => Volunteer::skillsList()[$key] ?? $key)
+                ->values(),
+        ], 200);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 3) قبول / رفض / تعليق طلب تطوع عام (أدمن)
+    |--------------------------------------------------------------------------
+    */
+    public function reviewVolunteerApplication(\Illuminate\Http\Request $request, $volunteerId)
+    {
+        $user = Auth::user();
+
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can review volunteer applications.'
+            ], 403);
+        }
+
+        $request->validate([
+            'status' => 'required|in:approved,rejected,pending,suspended',
+        ]);
+
+        $volunteer = Volunteer::find($volunteerId);
+
+        if (!$volunteer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Volunteer application not found.'
+            ], 404);
+        }
+
+        // لا يمكن مراجعة سجل لم يقدّم أصلاً طلب تطوع عام
+        if (!$volunteer->general_application) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This record is not a general volunteer application.'
+            ], 400);
+        }
+
+        if ($volunteer->status === $request->status) {
+            return response()->json([
+                'success' => false,
+                'message' => "Application is already {$request->status}."
+            ], 400);
+        }
+
+        $volunteer->update(['status' => Volunteer::normalizeStatus($request->status)]);
+
+        return response()->json([
+            'success'   => true,
+            'message'   => "Volunteer application {$request->status} successfully.",
+            'volunteer' => $volunteer,
+        ], 200);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 4) قوائم طلبات التطوع العامة حسب الحالة (أدمن)
+    |--------------------------------------------------------------------------
+    */
+    public function getPendingVolunteerApplications()
+    {
+        return $this->getVolunteerApplicationsByStatus('pending');
+    }
+
+    public function getApprovedVolunteerApplications()
+    {
+        return $this->getVolunteerApplicationsByStatus('approved');
+    }
+
+    public function getApprovedGeneralVolunteerApplications()
+    {
+        $volunteers = Volunteer::where('status', 'approved')
+            ->where('general_application', true)
+            ->with(['user:id,first_name,last_name,email,phone', 'governorate:id,name'])
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn($v) => $this->formatVolunteerApplication($v));
+
+        return response()->json([
+            'success' => true,
+            'count'   => $volunteers->count(),
+            'data'    => $volunteers,
+        ], 200);
+    }
+
+    public function getRejectedVolunteerApplications()
+    {
+        return $this->getVolunteerApplicationsByStatus('rejected');
+    }
+
+    public function getSuspendedVolunteerApplications()
+    {
+        return $this->getVolunteerApplicationsByStatus('suspended');
+    }
+
+    private function getVolunteerApplicationsByStatus(string $status)
+    {
+        $volunteers = Volunteer::where('status', $status)
+            ->where('general_application', true)
+            ->with(['user:id,first_name,last_name,email,phone', 'governorate:id,name'])
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn($v) => $this->formatVolunteerApplication($v));
+
+        return response()->json([
+            'success' => true,
+            'count'   => $volunteers->count(),
+            'data'    => $volunteers
+        ], 200);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 5) فلترة عامة لطلبات التطوع (أدمن) — دالة مستقلة إضافية
+    |--------------------------------------------------------------------------
+    */
+    public function filterVolunteerApplications(\Illuminate\Http\Request $request)
+    {
+        $request->validate([
+            'status'         => 'nullable|in:pending,approved,rejected,suspended',
+            'gender'         => 'nullable|in:male,female',
+            'governorate_id' => 'nullable|integer|exists:governorates,id',
+            'skill' => 'nullable|in:' . implode(',', Volunteer::skillsList()),
+        ]);
+
+        $query = Volunteer::with(['user:id,first_name,last_name,email,phone', 'governorate:id,name'])
+            ->where('general_application', true);
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('gender')) {
+            $query->where('gender', $request->gender);
+        }
+
+        if ($request->filled('governorate_id')) {
+            $query->where('governorate_id', $request->governorate_id);
+        }
+
+        if ($request->filled('skill')) {
+            $query->whereJsonContains('skills', $request->skill);
+        }
+
+        $volunteers = $query->get()->map(fn($v) => $this->formatVolunteerApplication($v));
+
+        return response()->json([
+            'success' => true,
+            'count'   => $volunteers->count(),
+            'data'    => $volunteers
+        ], 200);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 6) قائمة المهارات الثابتة (مساعدة للفرونت)
+    |--------------------------------------------------------------------------
+    */
+    public function getVolunteerSkillsList()
+    {
+        return response()->json([
+            'success' => true,
+            'skills'  => Volunteer::skillsList(),
+        ], 200);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 7) التطوع لحملة معينة
+    |--------------------------------------------------------------------------
+    */
     public function volunteerForCampaign(VolunteerForCampaignRequest $request, $campaignId)
     {
         $user = Auth::user();
@@ -40,7 +297,6 @@ class VolunteerController extends Controller
             ], 400);
         }
 
-        // 🔥 الحملة لازم تكون مفتوحة فعلياً
         if ($campaign->status !== 'open') {
             return response()->json([
                 'success' => false,
@@ -48,7 +304,6 @@ class VolunteerController extends Controller
             ], 400);
         }
 
-        // 🔥 منع التطوع لو اكتمل العدد المطلوب
         if (
             $campaign->volunteers_needed !== null
             && $campaign->volunteers_joined >= $campaign->volunteers_needed
@@ -59,14 +314,24 @@ class VolunteerController extends Controller
             ], 400);
         }
 
-        $validated = $request->validated();
+        // التطوع لحملة مستقل عن الطلب العام، لكن الموافقة على الشروط إلزامية
+        $volunteer = $user->volunteer;
 
-        $volunteer = $user->volunteer ?? Volunteer::create([
-            'user_id'     => $user->id,
-            'skills'      => $validated['skills'] ?? null,
-            'description' => null,
-            'status'      => 'active',
-        ]);
+        if ($volunteer) {
+            // موجود مسبقًا (من طلب عام أو حملة سابقة) — نسجل آخر موافقة
+            $volunteer->update([
+                'agreed_to_terms'    => true,
+                'agreed_to_terms_at' => now(),
+            ]);
+        } else {
+            $volunteer = Volunteer::create([
+                'user_id'             => $user->id,
+                'agreed_to_terms'     => true,
+                'agreed_to_terms_at'  => now(),
+                'general_application' => false,
+                'status'              => 'approved',
+            ]);
+        }
 
         $already = $campaign->volunteers()
             ->where('volunteer_id', $volunteer->id)
@@ -82,8 +347,8 @@ class VolunteerController extends Controller
         $campaign->volunteers()->attach($volunteer->id, [
             'status'         => 'pending',
             'assigned_date'  => null,
-            'available_time' => $validated['available_time'] ?? null,
-            'notes'          => $validated['notes'] ?? null,
+            'available_time' => null,
+            'notes'          => $request->notes ?? null,
         ]);
 
         return response()->json([
@@ -91,9 +356,10 @@ class VolunteerController extends Controller
             'message' => 'Volunteer request submitted successfully.',
         ], 201);
     }
+
     /*
     |--------------------------------------------------------------------------
-    | 2) جميع المتطوعين لحملة معينة
+    | 8) جميع المتطوعين لحملة معينة (كل الحالات)
     |--------------------------------------------------------------------------
     */
     public function getCampaignVolunteers($campaignId)
@@ -113,14 +379,59 @@ class VolunteerController extends Controller
             ->map(fn($v) => $this->formatVolunteerWithPivot($v));
 
         return response()->json([
-            'success' => true,
+            'success'    => true,
             'volunteers' => $volunteers
         ], 200);
     }
 
     /*
     |--------------------------------------------------------------------------
-    | 3) جميع الحملات المقبول فيها المستخدم الحالي كمتطوع
+    | 9) متطوعين حملة معينة حسب الحالة (دوال منفصلة)
+    |--------------------------------------------------------------------------
+    */
+    public function getCampaignPendingVolunteers($campaignId)
+    {
+        return $this->getCampaignVolunteersByStatus($campaignId, 'pending');
+    }
+
+    public function getCampaignApprovedVolunteers($campaignId)
+    {
+        return $this->getCampaignVolunteersByStatus($campaignId, 'approved');
+    }
+
+    public function getCampaignRejectedVolunteers($campaignId)
+    {
+        return $this->getCampaignVolunteersByStatus($campaignId, 'rejected');
+    }
+
+    private function getCampaignVolunteersByStatus($campaignId, string $status)
+    {
+        $campaign = Campaign::find($campaignId);
+
+        if (!$campaign) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Campaign not found.'
+            ], 404);
+        }
+
+        $volunteers = $campaign->volunteers()
+            ->wherePivot('status', $status)
+            ->with('user:id,first_name,last_name,email,phone')
+            ->get()
+            ->map(fn($v) => $this->formatVolunteerWithPivot($v));
+
+        return response()->json([
+            'success'     => true,
+            'campaign_id' => $campaign->id,
+            'count'       => $volunteers->count(),
+            'volunteers'  => $volunteers
+        ], 200);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 10) جميع الحملات المقبول فيها المستخدم الحالي كمتطوع
     |--------------------------------------------------------------------------
     */
     public function getMyApprovedCampaigns()
@@ -129,7 +440,7 @@ class VolunteerController extends Controller
 
         if (!$user || !$user->volunteer) {
             return response()->json([
-                'success' => true,
+                'success'   => true,
                 'campaigns' => []
             ], 200);
         }
@@ -141,14 +452,14 @@ class VolunteerController extends Controller
             ->map(fn($c) => $this->formatCampaignWithPivot($c));
 
         return response()->json([
-            'success' => true,
+            'success'   => true,
             'campaigns' => $campaigns
         ], 200);
     }
 
     /*
     |--------------------------------------------------------------------------
-    | 4) تطوعات المستخدم الحالي اللي لسا pending (ما انقبلت ولا انرفضت)
+    | 11) تطوعات المستخدم الحالي اللي لسا pending
     |--------------------------------------------------------------------------
     */
     public function getMyPendingCampaigns()
@@ -194,7 +505,7 @@ class VolunteerController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | 5) قبول / رفض متطوع بحملة (أدمن)
+    | 12) قبول / رفض متطوع بحملة معينة (أدمن)
     |--------------------------------------------------------------------------
     */
     public function updateVolunteerStatus(\Illuminate\Http\Request $request, $campaignId, $volunteerId)
@@ -233,7 +544,6 @@ class VolunteerController extends Controller
         $oldStatus = $pivot->pivot->status;
         $newStatus = $request->status;
 
-        // لو نفس الحالة، ما في حاجة نعمل أي شي
         if ($oldStatus === $newStatus) {
             return response()->json([
                 'success' => false,
@@ -246,14 +556,12 @@ class VolunteerController extends Controller
             'assigned_date' => $newStatus === 'approved' ? now() : null,
         ]);
 
-        // 🔥 تعديل العداد بدقة حسب التحول بين الحالات
         if ($oldStatus !== 'approved' && $newStatus === 'approved') {
             $campaign->increment('volunteers_joined');
         } elseif ($oldStatus === 'approved' && $newStatus !== 'approved') {
             $campaign->decrement('volunteers_joined');
         }
 
-        // 🔥 تحديث حالة الحملة تلقائياً لو اكتمل عدد المتطوعين
         $campaign->refresh();
         $this->checkCampaignCompletion($campaign);
 
@@ -266,7 +574,7 @@ class VolunteerController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | 6) إضافة ساعات عمل لمتطوع بحملة معينة (field_worker فقط)
+    | 13) إضافة ساعات عمل لمتطوع بحملة معينة (field_worker فقط)
     |--------------------------------------------------------------------------
     */
     public function addVolunteerHours(AddVolunteerHoursRequest $request, $campaignId, $volunteerId)
@@ -298,7 +606,6 @@ class VolunteerController extends Controller
             ], 404);
         }
 
-        // 🔥 لازم يكون المتطوع مقبول بهذه الحملة فعلياً قبل تسجيل ساعات له
         $isApproved = $campaign->volunteers()
             ->wherePivot('status', 'approved')
             ->where('volunteer_id', $volunteer->id)
@@ -318,13 +625,13 @@ class VolunteerController extends Controller
             'campaign_id'           => $campaign->id,
             'date'                  => $validated['date'],
             'hours'                 => $validated['hours'],
-            'activity_description' => $validated['activity_description'] ?? null,
+            'activity_description'  => $validated['activity_description'] ?? null,
         ]);
 
         return response()->json([
-            'success'           => true,
-            'message'           => 'Volunteer hours logged successfully.',
-            'entry'             => $entry,
+            'success'                 => true,
+            'message'                 => 'Volunteer hours logged successfully.',
+            'entry'                   => $entry,
             'total_hours_in_campaign' => $volunteer->hours()->where('campaign_id', $campaign->id)->sum('hours'),
             'total_hours_overall'     => $volunteer->totalHours(),
         ], 201);
@@ -332,7 +639,7 @@ class VolunteerController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | 7) عرض ساعات متطوع بحملة معينة (مساعدة)
+    | 14) عرض ساعات متطوع بحملة معينة
     |--------------------------------------------------------------------------
     */
     public function getVolunteerHoursInCampaign($campaignId, $volunteerId)
@@ -351,7 +658,7 @@ class VolunteerController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | 8) جميع ساعات تطوع المستخدم الحالي (مساعدة)
+    | 15) جميع ساعات تطوع المستخدم الحالي
     |--------------------------------------------------------------------------
     */
     public function getMyVolunteerHours()
@@ -377,84 +684,31 @@ class VolunteerController extends Controller
             'total_hours' => $entries->sum('hours'),
         ], 200);
     }
-    public function getCampaignPendingVolunteers($campaignId)
-    {
-        $campaign = Campaign::find($campaignId);
-
-        if (!$campaign) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Campaign not found.'
-            ], 404);
-        }
-
-        $volunteers = $campaign->volunteers()
-            ->wherePivot('status', 'pending')
-            ->with('user:id,first_name,last_name,email,phone')
-            ->get()
-            ->map(fn($v) => $this->formatVolunteerWithPivot($v));
-
-        return response()->json([
-            'success'     => true,
-            'campaign_id' => $campaign->id,
-            'count'       => $volunteers->count(),
-            'volunteers'  => $volunteers
-        ], 200);
-    }
-    public function getCampaignApprovedVolunteers($campaignId)
-    {
-        $campaign = Campaign::find($campaignId);
-
-        if (!$campaign) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Campaign not found.'
-            ], 404);
-        }
-
-        $volunteers = $campaign->volunteers()
-            ->wherePivot('status', 'approved')
-            ->with('user:id,first_name,last_name,email,phone')
-            ->get()
-            ->map(fn($v) => $this->formatVolunteerWithPivot($v));
-
-        return response()->json([
-            'success'     => true,
-            'campaign_id' => $campaign->id,
-            'count'       => $volunteers->count(),
-            'volunteers'  => $volunteers
-        ], 200);
-    }
-    public function getCampaignRejectedVolunteers($campaignId)
-    {
-        $campaign = Campaign::find($campaignId);
-
-        if (!$campaign) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Campaign not found.'
-            ], 404);
-        }
-
-        $volunteers = $campaign->volunteers()
-            ->wherePivot('status', 'rejected')
-            ->with('user:id,first_name,last_name,email,phone')
-            ->get()
-            ->map(fn($v) => $this->formatVolunteerWithPivot($v));
-
-        return response()->json([
-            'success'     => true,
-            'campaign_id' => $campaign->id,
-            'count'       => $volunteers->count(),
-            'volunteers'  => $volunteers
-        ], 200);
-    }
 
     /*
     |--------------------------------------------------------------------------
     | HELPERS — تنسيق الرد
     |--------------------------------------------------------------------------
     */
+    private function formatVolunteerApplication($v): array
+    {
+        return [
+            'volunteer_id'  => $v->id,
+            'name'          => trim($v->user->first_name . ' ' . $v->user->last_name),
+            'email'         => $v->user->email,
+            'phone'         => $v->phone,
+            'gender'        => $v->gender,
+            'occupation'    => $v->occupation,
+            'governorate'   => $v->governorate->name ?? null,
+            'skills'              => $v->skills,
+            'availability'        => $v->availability,
+            'description'         => $v->description,
+            'status'              => $v->status,
+            'general_application' => (bool) $v->general_application,
+            'applied_at'          => $v->created_at,
+        ];
+    }
+
     private function formatVolunteerWithPivot($volunteer): array
     {
         return [
@@ -488,6 +742,7 @@ class VolunteerController extends Controller
             'notes'             => $campaign->pivot->notes,
         ];
     }
+
     private function checkCampaignCompletion(Campaign $campaign)
     {
         $donationsDone  = $campaign->amount_needed !== null

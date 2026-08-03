@@ -14,17 +14,16 @@ class VolunteersTableSeeder extends Seeder
             [
                 'skills' => 'Communication, Teamwork',
                 'description' => 'Active volunteer with strong motivation.',
-                'status' => 'active',
+                'status' => 'approved',
             ]
         );
 
-        // مثال ثاني بدون Loop
         Volunteer::updateOrCreate(
             ['user_id' => 2],
             [
                 'skills' => 'Leadership, Organizing',
                 'description' => 'Experienced volunteer.',
-                'status' => 'active',
+                'status' => 'pending',
             ]
         );
     }

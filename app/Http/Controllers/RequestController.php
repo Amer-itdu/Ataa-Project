@@ -8,9 +8,11 @@ use App\Http\Requests\StoreSchoolRequest;
 use App\Http\Requests\StoreUniversityRequest;
 use App\Http\Requests\AcceptRequestRequest;
 use App\Models\Beneficiary;
+use App\Models\Governorate;
 use App\Models\Orphan;
-use App\Models\RequestModel;
 use App\Models\Patient;
+use App\Models\Region;
+use App\Models\RequestModel;
 use App\Models\SchoolStudent;
 use App\Models\UniversityStudent;
 use Illuminate\Support\Facades\Auth;
@@ -18,7 +20,16 @@ use Illuminate\Support\Facades\Storage;
 
 class RequestController extends Controller
 {
-    /*
+    private function ensureCanCreateRequest($user)
+    {
+        if (! $user || ($user->role !== 'admin' && $user->user_category !== 'beneficiary')) {
+            return response()->json([
+                'message' => 'Only beneficiaries or admins can create requests.',
+            ], 403);
+        }
+
+        return null;
+    }/*
     |--------------------------------------------------------------------------
     | PATIENT REQUEST
     |--------------------------------------------------------------------------
@@ -26,6 +37,12 @@ class RequestController extends Controller
     public function storePatientRequest(StorePatientRequest $request)
     {
         $user = Auth::user();
+        $authorizationResponse = $this->ensureCanCreateRequest($user);
+
+        if ($authorizationResponse) {
+            return $authorizationResponse;
+        }
+
         $isAdmin = $user->role === 'admin';
 
         // 1) Beneficiary data
@@ -42,26 +59,14 @@ class RequestController extends Controller
             $requiredAmount = $request->required_amount;
             $status = 'accepted';
         } else {
-
-            if ($request->is_self === "true") {
-                $beneficiaryData = [
-                    'full_name'      => $request->full_name,
-                    'governorate_id' => $request->governorate_id,
-                    'region_id'      => $request->region_id,
-                    'national_id'    => $request->national_id,
-                    'email'          => $user->email,
-                    'phone'          => $user->phone,
-                ];
-            } else {
-                $beneficiaryData = [
-                    'full_name'      => $request->full_name,
-                    'governorate_id' => $request->governorate_id,
-                    'region_id'      => $request->region_id,
-                    'national_id'    => $request->national_id,
-                    'email'          => $request->email,
-                    'phone'          => $request->phone,
-                ];
-            }
+            $beneficiaryData = [
+                'full_name'      => $request->full_name,
+                'governorate_id' => $request->governorate_id,
+                'region_id'      => $request->region_id,
+                'national_id'    => $request->national_id,
+                'email'          => $request->email,
+                'phone'          => $request->phone,
+            ];
 
             $requiredAmount = $request->required_amount ?? 0;
             $status = 'pending';
@@ -121,6 +126,12 @@ class RequestController extends Controller
     public function storeSchoolRequest(StoreSchoolRequest $request)
     {
         $user = Auth::user();
+        $authorizationResponse = $this->ensureCanCreateRequest($user);
+
+        if ($authorizationResponse) {
+            return $authorizationResponse;
+        }
+
         $isAdmin = $user->role === 'admin';
 
         // 1) Beneficiary
@@ -137,14 +148,13 @@ class RequestController extends Controller
             $requiredAmount = $request->required_amount;
             $status = 'accepted';
         } else {
-
             $beneficiaryData = [
                 'full_name'      => $request->full_name,
                 'governorate_id' => $request->governorate_id,
                 'region_id'      => $request->region_id,
                 'national_id'    => $request->national_id,
-                'email'          => $user->email,
-                'phone'          => $user->phone,
+                'email'          => $request->email,
+                'phone'          => $request->phone,
             ];
 
             $requiredAmount = 0;
@@ -202,6 +212,12 @@ class RequestController extends Controller
     public function storeUniversityRequest(StoreUniversityRequest $request)
     {
         $user = Auth::user();
+        $authorizationResponse = $this->ensureCanCreateRequest($user);
+
+        if ($authorizationResponse) {
+            return $authorizationResponse;
+        }
+
         $isAdmin = $user->role === 'admin';
 
         // 1) Beneficiary
@@ -218,14 +234,13 @@ class RequestController extends Controller
             $requiredAmount = $request->required_amount;
             $status = 'accepted';
         } else {
-
             $beneficiaryData = [
                 'full_name'      => $request->full_name,
                 'governorate_id' => $request->governorate_id,
                 'region_id'      => $request->region_id,
                 'national_id'    => $request->national_id,
-                'email'          => $user->email,
-                'phone'          => $user->phone,
+                'email'          => $request->email,
+                'phone'          => $request->phone,
             ];
 
             $requiredAmount = 0;
@@ -283,6 +298,12 @@ class RequestController extends Controller
     public function storeOrphanRequest(StoreOrphanRequest $request)
     {
         $user = Auth::user();
+        $authorizationResponse = $this->ensureCanCreateRequest($user);
+
+        if ($authorizationResponse) {
+            return $authorizationResponse;
+        }
+
         $isAdmin = $user->role === 'admin';
 
         // 1) بيانات المستفيد
@@ -603,6 +624,9 @@ class RequestController extends Controller
     }
     public function filterRequests(\Illuminate\Http\Request $httpRequest)
     {
+        $user = Auth::user();
+        $isAdmin = $user && $user->role === 'admin';
+
         $httpRequest->validate([
             'request_type'    => 'nullable|in:patient,orphan,school,university',
             'status'          => 'nullable|in:pending,accepted,rejected',
@@ -620,12 +644,19 @@ class RequestController extends Controller
             'universityStudent.donations'
         ]);
 
-        if ($httpRequest->filled('status')) {
+        if ($isAdmin && $httpRequest->filled('status')) {
             $query->where('status', $httpRequest->status);
         }
 
+        if (! $isAdmin) {
+            $query->where('status', 'accepted')
+                  ->where('status_request', 'open');
+        }
+
         if ($httpRequest->filled('status_request')) {
-            $query->where('status_request', $httpRequest->status_request);
+            if ($isAdmin) {
+                $query->where('status_request', $httpRequest->status_request);
+            }
         }
 
         if ($httpRequest->filled('request_type')) {
