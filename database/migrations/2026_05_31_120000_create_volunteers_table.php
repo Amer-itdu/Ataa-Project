@@ -12,11 +12,20 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
 
-            $table->text('skills')->nullable();
+            $table->string('phone')->nullable();
+            $table->enum('gender', ['male', 'female'])->nullable();
+            $table->string('occupation')->nullable();
+            $table->foreignId('governorate_id')->nullable()->constrained()->nullOnDelete();
+
+            $table->json('skills')->nullable();
+            $table->string('availability')->nullable();
             $table->text('description')->nullable();
 
-            $table->enum('status', ['active', 'inactive', 'suspended'])->default('active');
+            $table->boolean('agreed_to_terms')->default(false);
+            $table->timestamp('agreed_to_terms_at')->nullable();
 
+            $table->enum('status', ['pending', 'approved', 'rejected', 'suspended'])->default('pending');
+             $table->boolean('general_application')->default(false);
             $table->timestamps();
         });
     }

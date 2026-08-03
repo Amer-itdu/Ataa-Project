@@ -29,11 +29,11 @@ class StoreUniversityRequest extends FormRequest
 
             'title' => $isAdmin ? 'required|string|max:255' : 'prohibited',
 
-            'email' => $isAdmin ? 'nullable|required_without:phone|email' : 'prohibited',
+            'email' => $isAdmin ? 'nullable|required_without:phone|email' : 'nullable|required_without:phone|email',
 
             'phone' => $isAdmin
                 ? 'nullable|required_without:email|regex:/^[0-9]+$/'
-                : 'prohibited',
+                : 'nullable|required_without:email|regex:/^[0-9]+$/',
 
             'description' => 'required|string',
 

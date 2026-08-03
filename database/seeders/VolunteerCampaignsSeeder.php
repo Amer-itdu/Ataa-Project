@@ -34,7 +34,7 @@ class VolunteerCampaignsSeeder extends Seeder
                 [
                     'skills' => 'Management, Logistics',
                     'description' => 'Experienced in organizing events.',
-                    'status' => 'active',
+                    'status' => 'approved',
                 ]
             );
         }
@@ -45,7 +45,7 @@ class VolunteerCampaignsSeeder extends Seeder
                 [
                     'skills' => 'First Aid, Field Support',
                     'description' => 'Ready for field volunteering.',
-                    'status' => 'active',
+                    'status' => 'pending',
                 ]
             );
         }
@@ -56,7 +56,7 @@ class VolunteerCampaignsSeeder extends Seeder
                 [
                     'skills' => 'Teaching, Social Support',
                     'description' => 'Loves helping children and families.',
-                    'status' => 'active',
+                    'status' => 'approved',
                 ]
             );
         }
