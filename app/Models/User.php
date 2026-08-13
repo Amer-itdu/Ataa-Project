@@ -26,6 +26,7 @@ class User extends Authenticatable
         'role',
         'user_category',
         'status',
+         'fcm_token',
     ];
 
     protected $hidden = [

@@ -15,6 +15,7 @@ use App\Models\Region;
 use App\Models\RequestModel;
 use App\Models\SchoolStudent;
 use App\Models\UniversityStudent;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
@@ -789,6 +790,15 @@ class RequestController extends Controller
         }
 
         $requestModel->update($updateData);
+
+        // 🔔 إرسال إشعار لصاحب الطلب
+        if ($requestModel->user) {
+            app(NotificationService::class)->sendToUser(
+                $requestModel->user,
+                'تم قبول طلبك',
+                'مبروك، تم قبول طلبك بنجاح'
+            );
+        }
 
         return response()->json([
             'success' => true,
