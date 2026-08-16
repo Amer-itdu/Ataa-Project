@@ -11,6 +11,7 @@ use App\Http\Controllers\VolunteerController;
 use App\Http\Controllers\VolunteerHourController;
 
 
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -206,4 +207,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/quickDonate', [DonationController::class, 'quickDonateToAssociation']);
     Route::post('/donate/{type}/{id}', [DonationController::class, 'donate'])
         ->where('type', 'request|campaign');
+                Route::get('/donations/all', [DonationController::class, 'getAllDonations']);
+                Route::get('/mydonations', [DonationController::class, 'myDonationsSummary']);
+
 });
