@@ -455,4 +455,85 @@ class DonationController extends Controller
         'donations'      => $donations,
     ], 200);
 }
+public function disburseCampaignCollectedAmount($campaignId)
+{
+    $user = Auth::user();
+
+    if ($user->role !== 'admin') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Only admins can disburse funds.'
+        ], 403);
+    }
+
+    $campaign = Campaign::find($campaignId);
+
+    if (!$campaign) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Campaign not found.'
+        ], 404);
+    }
+
+    $amountToDisburse = (float) $campaign->amount_collected;
+
+    if ($amountToDisburse == 0) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Campaign has no collected amount to disburse.'
+        ], 400);
+    }
+
+    $admin = \App\Models\User::find(1);
+    $adminBalance = $admin->getBalance('USD');
+
+    if ($adminBalance < $amountToDisburse) {
+        return response()->json([
+            'success' => false,
+            'message' => "Insufficient balance. Available: {$adminBalance} USD"
+        ], 400);
+    }
+
+    DB::beginTransaction();
+
+    try {
+        // اخصم من الأدمن
+        $admin->subtractBalance('USD', $amountToDisburse);
+
+        // سجّل الصرف
+        \App\Models\CampaignDisbursal::create([
+            'campaign_id'       => $campaign->id,
+            'admin_id'          => $user->id,
+            'amount'            => $amountToDisburse,
+            'currency'          => 'USD',
+            'original_amount'   => $amountToDisburse,
+            'original_currency' => 'USD',
+            'notes'             => 'Campaign disbursement',
+            'disbursed_by'      => $user->first_name . ' ' . $user->last_name,
+        ]);
+
+        // صفّر amount_collected
+        $campaign->update(['amount_collected' => 0]);
+
+        DB::commit();
+
+        return response()->json([
+            'success'       => true,
+            'message'       => 'Disbursed successfully.',
+            'disbursed'     => $amountToDisburse,
+            'campaign'      => [
+                'id'    => $campaign->id,
+                'title' => $campaign->title,
+            ],
+            'admin_balance' => round($admin->getBalance('USD'), 2),
+        ], 200);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json([
+            'success' => false,
+            'message' => 'Error: ' . $e->getMessage(),
+        ], 500);
+    }
+}
 }

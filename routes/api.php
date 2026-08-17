@@ -160,7 +160,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::put('closeRequest/{id}', [RequestController::class, 'closeRequest']);
     Route::put('acceptRequest/{id}', [RequestController::class, 'acceptRequest']);
-        Route::patch('/rejectRequest/{requestId}/', [RequestController::class, 'rejectRequest']);
+        Route::patch('/rejectRequest/{requestId}', [RequestController::class, 'rejectRequest']);
 
     //marwa
     Route::get('getopenacceptedrequests', [RequestController::class, 'getOpenAcceptedRequests']);
