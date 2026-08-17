@@ -43,6 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::put('closeRequest/{id}', [RequestController::class, 'closeRequest']);
         Route::put('acceptRequest/{id}', [RequestController::class, 'acceptRequest']);
+        Route::patch('rejectRequest/{requestId}',[RequestController::class, 'rejectRequest']);
     });
 
 
@@ -113,6 +114,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/my-campaigns/pending',  [VolunteerController::class, 'getMyPendingCampaigns']);
     Route::get('/my-volunteer-hours',    [VolunteerController::class, 'getMyVolunteerHours']);
     Route::get('/approved-general-volunteers', [VolunteerController::class, 'getApprovedGeneralVolunteerApplications']);
+    Route::get('/all-volunteers', [VolunteerController::class, 'getAllVolunteers']);
 });
 //Dashboard routes dashboard 
 //Dashboard routes

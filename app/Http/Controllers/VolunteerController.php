@@ -687,6 +687,25 @@ class VolunteerController extends Controller
             'total_hours' => $entries->sum('hours'),
         ], 200);
     }
+    /*
+    |--------------------------------------------------------------------------
+    | 16) جميع المتطوعين
+    |--------------------------------------------------------------------------
+    */
+    public function getAllVolunteers()
+    {
+        $volunteers = Volunteer::with(['user:id,first_name,last_name,email,phone', 'governorate:id,name'])
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn($v) => $this->formatVolunteerApplication($v));
+
+        return response()->json([
+            'success' => true,
+            'count'   => $volunteers->count(),
+            'data'    => $volunteers,
+        ], 200);
+    }
+
     public function getAllVolunteerApplications(Request $request)
     {
         $user = Auth::user();
