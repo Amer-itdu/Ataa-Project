@@ -219,21 +219,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 // Campaign Disbursal APIs
 Route::middleware(['auth:sanctum'])->group(function () {
-    // Disburse campaigns
-    Route::post('/disburse/campaigns', [CampaignDisbursalController::class, 'disburseCampaigns']);
+    // الصرف الفردي للحملات والطلبات
+    Route::post('/disburse/campaign/{campaignId}', [CampaignDisbursalController::class, 'disburseCampaign']);
+    Route::get('/disburse/campaigns/pending', [CampaignDisbursalController::class, 'getPendingCampaignDisbursements']);
+    Route::post('/disburse/request/{requestId}', [CampaignDisbursalController::class, 'disburseRequest']);
+    Route::get('/disburse/requests/pending', [CampaignDisbursalController::class, 'getPendingRequestDisbursements']);
     
-    // Disburse requests
-    Route::post('/disburse/requests', [CampaignDisbursalController::class, 'disburseRequests']);
     
-    // Disburse all (campaigns and requests)
-    Route::post('/disburse/all', [CampaignDisbursalController::class, 'disburseAll']);
-    
-    // Disburse for specific admin
-    Route::post('/disburse/admin/{adminId}', [CampaignDisbursalController::class, 'disburseForAdmin']);
-    
-    // Get total disbursed amount (with optional date filter)
-    Route::get('/disburse/total', [CampaignDisbursalController::class, 'calculateTotalDisbursed']);
-    
-    // Get disbursement logs
-    Route::get('/disburse/logs', [CampaignDisbursalController::class, 'getDisbursementLogs']);
+});
+Route::middleware('auth:sanctum')->group(function () {
+    // تقارير الصرف
+    Route::get('/reports/campaigns-disbursement/{year}/{month}', [CampaignDisbursalController::class, 'getCampaignsDisbursementReport']);
+    Route::get('/reports/requests-disbursement/{year}/{month}', [CampaignDisbursalController::class, 'getRequestsDisbursementReport']);
+    Route::get('/reports/complete-disbursement/{year}/{month}', [CampaignDisbursalController::class, 'getCompleteDisbursementReport']);
 });

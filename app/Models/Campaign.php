@@ -6,6 +6,8 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use App\Models\DisbursementLog;
+use Illuminate\Support\Facades\Log;  // 🔥 أضيف هون
+
 
 class Campaign extends Model
 {
@@ -60,11 +62,27 @@ class Campaign extends Model
     /**
      * التحقق من أن الحملة مغلقة/منتهية
      */
-    public function isClosed(): bool
-    {
-        return in_array($this->status, ['completed', 'closed', 'ended', 'cancelled']);
-    }
-
+   public function isClosed(): bool
+{
+    // الحملة تعتبر مغلقة إذا:
+    // 1. الـ status من الحالات المغلقة
+    // 2. أو اكتمل المبلغ المطلوب
+    
+    $closedStatuses = [
+        'completed', 
+        'closed', 
+        'ended', 
+        'cancelled',
+        'completed_donations',      // 🔥 أضيف
+        'completed_all',
+        'expired'            // 🔥 أضيف
+    ];
+    
+    $isClosed = in_array($this->status, $closedStatuses);
+    $amountCompleted = $this->amount_needed && $this->amount_collected >= $this->amount_needed;
+    
+    return $isClosed || $amountCompleted;
+}
     /**
      * التحقق من أن المبلغ لم يتم صرفه من قبل
      */
@@ -78,27 +96,48 @@ class Campaign extends Model
      * 
      * @return bool
      */
-    public function disburseToAdmin(): bool
+    public function disburseToAdmin(): array
     {
         // ✅ التحقق من أن الحملة مغلقة
         if (!$this->isClosed()) {
-            return false;
+            return [
+                'success' => false,
+                'message' => 'Campaign is not closed or completed.'
+            ];
         }
 
         // ✅ التحقق من عدم الصرف مسبقاً
         if (!$this->isPending()) {
-            return false;
+            return [
+                'success' => false,
+                'message' => 'Campaign amount has already been disbursed.'
+            ];
         }
 
         // ✅ التحقق من وجود مبلغ مجمع
         if ($this->amount_collected <= 0) {
-            return false;
+            return [
+                'success' => false,
+                'message' => 'No amount collected in this campaign.'
+            ];
         }
 
         // ✅ الصرف من رصيد الـ Admin
         $admin = $this->admin;
         if (!$admin) {
-            return false;
+            return [
+                'success' => false,
+                'message' => 'Admin user not found.'
+            ];
+        }
+
+        // تحقق من رصيد الأدمن
+        $adminBalance = $admin->getBalance('USD');
+        if ($adminBalance < $this->amount_collected) {
+            return [
+                'success' => false,
+                'message' => "Insufficient admin balance. Available: {$adminBalance} USD, Needed: {$this->amount_collected} USD"
+            ];
         }
 
         DB::beginTransaction();
@@ -110,22 +149,33 @@ class Campaign extends Model
             // تحديث حالة الصرف
             $this->update(['is_disbursed' => true]);
 
-            // تسجيل العملية
-            DisbursementLog::create([
-                'admin_id' => $admin->id,
-                'amount' => $this->amount_collected,
-                'currency' => 'USD',
-                'type' => 'campaign',
-                'reference_id' => $this->id,
-                'campaign_title' => $this->title,
-                'status' => 'completed',
-            ]);
+            try {
+                \App\Models\DisbursementLog::create([
+                    'admin_id' => $admin->id,
+                    'amount' => $this->amount_collected,
+                    'currency' => 'USD',
+                    'type' => 'campaign',
+                    'reference_id' => $this->id,
+                    'campaign_title' => $this->title,
+                    'status' => 'completed',
+                ]);
+            } catch (\Exception $logError) {
+                Log::warning('Failed to create DisbursementLog: ' . $logError->getMessage());  // 🔥 بدل \Log
+            }
 
             DB::commit();
-            return true;
+            return [
+                'success' => true,
+                'message' => 'Campaign amount disbursed successfully.',
+                'amount' => $this->amount_collected,
+                'admin_balance_remaining' => $admin->getBalance('USD')
+            ];
         } catch (\Exception $e) {
             DB::rollBack();
-            return false;
+            return [
+                'success' => false,
+                'message' => 'Error during disbursement: ' . $e->getMessage()
+            ];
         }
     }
 
