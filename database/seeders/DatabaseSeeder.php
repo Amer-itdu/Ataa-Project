@@ -16,13 +16,16 @@ class DatabaseSeeder extends Seeder
     /**
      * Seed the application's database.
      */
-    public function run(): void
-    {
-        $this->call(UsersTableSeeder::class);
-        $this->call(CampaignsTableSeeder::class);
-        $this->call(VolunteersTableSeeder::class);
-        $this->call(RequestsTableSeeder::class);
-        $this->call(VolunteerCampaignsSeeder::class);
-        $this->call(GovernorateRegionSeeder::class);
-    }
+  public function run(): void
+{
+    $this->call([
+        GovernorateRegionSeeder::class,
+        UsersTableSeeder::class,
+        RequestsTableSeeder::class,
+        CampaignsTableSeeder::class,
+        VolunteersTableSeeder::class,
+        VolunteerCampaignsSeeder::class,        // 🔥 قبل DonationsTableSeeder
+        DonationsTableSeeder::class,            // 🔥 آخر واحد
+    ]);
+}
 }

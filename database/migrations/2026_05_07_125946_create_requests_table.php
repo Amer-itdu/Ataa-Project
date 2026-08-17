@@ -24,8 +24,11 @@ return new class extends Migration
 
             $table->string('personal_picture')->nullable();
             $table->decimal('required_amount', 10, 2)->default(0);
+           $table->decimal('amount_collected', 10, 2)->default(0);
+
             $table->string('title', 255)->nullable();
             $table->enum('status_request', ['open', 'closed'])->default('open');
+                        $table->boolean('is_disbursed')->default(false);
 
 
 

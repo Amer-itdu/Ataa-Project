@@ -21,7 +21,7 @@ class UsersTableSeeder extends Seeder
             'phone' => '0999000001',
             'date_of_birth' => '1985-06-12',
             'address' => 'Damascus, Syria',
-            'balances' => ['USD' => 1200, 'SYP' => 1500000],
+            'balances' => ['USD' => 1200],
             'password' => Hash::make('Admin1234'),
             'role' => 'admin',
             'user_category' => 'public',   // 🔥 مهم جداً

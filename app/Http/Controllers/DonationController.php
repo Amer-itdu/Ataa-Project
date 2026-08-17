@@ -376,77 +376,83 @@ class DonationController extends Controller
             ]
         ]);
     }
-    public function getAllDonations(Request $request)
-    {
-        $request->validate([
-            'donationable_type' => 'nullable|in:request,campaign',
-            'sort_by'            => 'nullable|in:created_at,amount',
-            'sort_dir'           => 'nullable|in:asc,desc',
-            'per_page'           => 'nullable|integer|min:1|max:100',
-        ]);
+  public function getAllDonations(Request $request)
+{
+    $request->validate([
+        'donationable_type' => 'nullable|in:request,campaign',
+        'sort_by'           => 'nullable|in:created_at,amount',
+        'sort_dir'          => 'nullable|in:asc,desc',
+    ]);
 
-        $query = Donation::with([
-            'donor.user:id,first_name,last_name,email',
-            'donationable'
-        ]);
+    $query = Donation::with([
+        'donor.user:id,first_name,last_name,email',
+        'donationable'
+    ]);
 
-        // 🔥 فلترة حسب النوع (request أو campaign)
-        if ($request->filled('donationable_type')) {
-            if ($request->donationable_type === 'request') {
-                $query->where(function ($q) {
-                    $q->whereIn('donationable_type', ['App\Models\Patient', 'App\Models\Orphan', 'App\Models\SchoolStudent', 'App\Models\UniversityStudent']);
-                });
-            } elseif ($request->donationable_type === 'campaign') {
-                $query->where('donationable_type', 'App\Models\Campaign');
-            }
+    // 🔥 فلترة حسب النوع
+    if ($request->filled('donationable_type')) {
+        if ($request->donationable_type === 'request') {
+            $query->where(function ($q) {
+                $q->whereIn('donationable_type', [
+                    'App\Models\Patient',
+                    'App\Models\Orphan',
+                    'App\Models\SchoolStudent',
+                    'App\Models\UniversityStudent'
+                ]);
+            });
+        } elseif ($request->donationable_type === 'campaign') {
+            $query->where('donationable_type', 'App\Models\Campaign');
+        }
+    }
+
+    $sortBy  = $request->get('sort_by', 'created_at');
+    $sortDir = $request->get('sort_dir', 'desc');
+    $query->orderBy($sortBy, $sortDir);
+
+    $donations = $query->get();
+
+    // تحويل البيانات
+    $donations = $donations->map(function ($donation) {
+        $donorName = 'Anonymous';
+        if ($donation->donor && !$donation->donor->anonymous) {
+            $donorName = trim($donation->donor->user->first_name . ' ' . $donation->donor->user->last_name);
         }
 
-        $sortBy  = $request->get('sort_by', 'created_at');
-        $sortDir = $request->get('sort_dir', 'desc');
-        $query->orderBy($sortBy, $sortDir);
+        $target = null;
+        if ($donation->donationable_type === 'App\Models\Campaign') {
+            $target = $donation->donationable->title;
+            $type = 'campaign';
+        } else {
+            $type = 'request';
+            $target = match ($donation->donationable_type) {
+                'App\Models\Patient'           => 'Patient: ' . ($donation->donationable->patient_name ?? 'N/A'),
+                'App\Models\Orphan'            => 'Orphan: ' . ($donation->donationable->orphan_name ?? 'N/A'),
+                'App\Models\SchoolStudent'     => 'School: ' . ($donation->donationable->school_student_name ?? 'N/A'),
+                'App\Models\UniversityStudent' => 'University: ' . ($donation->donationable->university_student_name ?? 'N/A'),
+                default                        => 'Unknown',
+            };
+        }
 
-        $donations = $query->paginate($request->get('per_page', 15));
+        return [
+            'id'                => $donation->id,
+            'donor_name'        => $donorName,
+            'donor_anonymous'   => $donation->donor?->anonymous ?? false,
+            'amount_usd'        => $donation->amount,
+            'original_amount'   => $donation->original_amount,
+            'original_currency' => $donation->original_currency,
+            'target_type'       => $type,
+            'target_name'       => $target,
+            'donated_at'        => $donation->created_at,
+        ];
+    });
 
-        $donations->getCollection()->transform(function ($donation) {
-            $donorName = 'Anonymous';
-            if ($donation->donor && !$donation->donor->anonymous) {
-                $donorName = trim($donation->donor->user->first_name . ' ' . $donation->donor->user->last_name);
-            }
+    $totalAmount = Donation::sum('amount');
 
-            $target = null;
-            if ($donation->donationable_type === 'App\Models\Campaign') {
-                $target = $donation->donationable->title;
-                $type = 'campaign';
-            } else {
-                $type = 'request';
-                $target = match ($donation->donationable_type) {
-                    'App\Models\Patient'           => 'Patient: ' . ($donation->donationable->patient_name ?? 'N/A'),
-                    'App\Models\Orphan'            => 'Orphan: ' . ($donation->donationable->orphan_name ?? 'N/A'),
-                    'App\Models\SchoolStudent'     => 'School: ' . ($donation->donationable->school_student_name ?? 'N/A'),
-                    'App\Models\UniversityStudent' => 'University: ' . ($donation->donationable->university_student_name ?? 'N/A'),
-                    default                        => 'Unknown',
-                };
-            }
-
-            return [
-                'id'                 => $donation->id,
-                'donor_name'         => $donorName,
-                'donor_anonymous'    => $donation->donor?->anonymous ?? false,
-                'amount_usd'         => $donation->amount,
-                'original_amount'    => $donation->original_amount,
-                'original_currency'  => $donation->original_currency,
-                'target_type'        => $type,
-                'target_name'        => $target,
-                'donated_at'         => $donation->created_at,
-            ];
-        });
-
-        $totalAmount = Donation::sum('amount');
-
-        return response()->json([
-            'success'      => true,
-            'total_donated' => $totalAmount,
-            'donations'    => $donations,
-        ], 200);
-    }
+    return response()->json([
+        'success'        => true,
+        'total_donated'  => $totalAmount,
+        'donations_count'=> $donations->count(),
+        'donations'      => $donations,
+    ], 200);
+}
 }

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BeneficiaryController;
 use App\Http\Controllers\CampaignController;
+use App\Http\Controllers\CampaignDisbursalController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DonationController;
 use App\Http\Controllers\LocationController;
@@ -136,6 +137,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/getUserById/{id}', [UserController::class, 'getUserById']);
     Route::get('/getAllUsers', [UserController::class, 'getallUsers']);
     Route::post('/addBalanceToUser/{userId}', [UserController::class, 'addBalanceToUser']);
+    Route::get('/getAdminWallet', [UserController::class, 'getAdminWallet']);
     //new
     Route::post('/setRejected/{id}', [UserController::class, 'setRejected']);
     Route::delete('/deleteUser/{id}', [UserController::class, 'deleteUser']);
@@ -158,6 +160,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::put('closeRequest/{id}', [RequestController::class, 'closeRequest']);
     Route::put('acceptRequest/{id}', [RequestController::class, 'acceptRequest']);
+        Route::patch('/rejectRequest/{requestId}/', [RequestController::class, 'rejectRequest']);
+
     //marwa
     Route::get('getopenacceptedrequests', [RequestController::class, 'getOpenAcceptedRequests']);
     Route::get('getopenacceptedpatients', [RequestController::class, 'getOpenAcceptedPatients']);
@@ -208,6 +212,26 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/donate/{type}/{id}', [DonationController::class, 'donate'])
         ->where('type', 'request|campaign');
                 Route::get('/donations/all', [DonationController::class, 'getAllDonations']);
-                Route::get('/mydonations', [DonationController::class, 'myDonationsSummary']);
 
+});
+
+// Campaign Disbursal APIs
+Route::middleware(['auth:sanctum'])->group(function () {
+    // Disburse campaigns
+    Route::post('/disburse/campaigns', [CampaignDisbursalController::class, 'disburseCampaigns']);
+    
+    // Disburse requests
+    Route::post('/disburse/requests', [CampaignDisbursalController::class, 'disburseRequests']);
+    
+    // Disburse all (campaigns and requests)
+    Route::post('/disburse/all', [CampaignDisbursalController::class, 'disburseAll']);
+    
+    // Disburse for specific admin
+    Route::post('/disburse/admin/{adminId}', [CampaignDisbursalController::class, 'disburseForAdmin']);
+    
+    // Get total disbursed amount (with optional date filter)
+    Route::get('/disburse/total', [CampaignDisbursalController::class, 'calculateTotalDisbursed']);
+    
+    // Get disbursement logs
+    Route::get('/disburse/logs', [CampaignDisbursalController::class, 'getDisbursementLogs']);
 });

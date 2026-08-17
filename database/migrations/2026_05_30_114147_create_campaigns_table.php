@@ -46,6 +46,7 @@ return new class extends Migration
                 'paused',
                 'cancelled'
             ])->default('open');
+            $table->boolean('is_disbursed')->default(false);
 
             $table->date('start_date')->nullable();
             $table->date('end_date')->nullable();

@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use App\Models\DisbursementLog;
 
 class Campaign extends Model
 {
@@ -17,7 +19,7 @@ class Campaign extends Model
         'title',
         'description',
         'type',
-        'participation_type',   // 🔥 جديد
+        'participation_type',
         'amount_needed',
         'amount_collected',
         'volunteers_needed',
@@ -25,6 +27,7 @@ class Campaign extends Model
         'status',
         'start_date',
         'end_date',
+        'is_disbursed', // 🔥 إضافة حقل لتتبع الصرف
     ];
 
     public function admin()
@@ -37,7 +40,6 @@ class Campaign extends Model
         return $this->morphMany(Donation::class, 'donationable');
     }
 
-    // العلاقة الصحيحة مع المتطوعين
     public function volunteers()
     {
         return $this->belongsToMany(Volunteer::class, 'volunteer_campaign', 'campaign_id', 'volunteer_id')
@@ -45,9 +47,86 @@ class Campaign extends Model
             ->withPivot(['assigned_date', 'status', 'available_time', 'notes'])
             ->withTimestamps();
     }
+
     public function media()
     {
         return $this->hasMany(CampaignMedia::class);
+    }
+
+    // ================================
+    // 🔥 الصرف من الحملة
+    // ================================
+
+    /**
+     * التحقق من أن الحملة مغلقة/منتهية
+     */
+    public function isClosed(): bool
+    {
+        return in_array($this->status, ['completed', 'closed', 'ended', 'cancelled']);
+    }
+
+    /**
+     * التحقق من أن المبلغ لم يتم صرفه من قبل
+     */
+    public function isPending(): bool
+    {
+        return !$this->is_disbursed;
+    }
+
+    /**
+     * صرف المبلغ المجمع للـ Admin
+     * 
+     * @return bool
+     */
+    public function disburseToAdmin(): bool
+    {
+        // ✅ التحقق من أن الحملة مغلقة
+        if (!$this->isClosed()) {
+            return false;
+        }
+
+        // ✅ التحقق من عدم الصرف مسبقاً
+        if (!$this->isPending()) {
+            return false;
+        }
+
+        // ✅ التحقق من وجود مبلغ مجمع
+        if ($this->amount_collected <= 0) {
+            return false;
+        }
+
+        // ✅ الصرف من رصيد الـ Admin
+        $admin = $this->admin;
+        if (!$admin) {
+            return false;
+        }
+
+        DB::beginTransaction();
+
+        try {
+            // خصم المبلغ من رصيد الـ Admin (USD فقط)
+            $admin->subtractBalance('USD', $this->amount_collected);
+
+            // تحديث حالة الصرف
+            $this->update(['is_disbursed' => true]);
+
+            // تسجيل العملية
+            DisbursementLog::create([
+                'admin_id' => $admin->id,
+                'amount' => $this->amount_collected,
+                'currency' => 'USD',
+                'type' => 'campaign',
+                'reference_id' => $this->id,
+                'campaign_title' => $this->title,
+                'status' => 'completed',
+            ]);
+
+            DB::commit();
+            return true;
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return false;
+        }
     }
 
     public function getProgressAttribute()
@@ -94,9 +173,6 @@ class Campaign extends Model
         ];
     }
 
-    // ================================
-    // 🔥 نوع المشاركة المسموح بالحملة
-    // ================================
     public function acceptsDonations(): bool
     {
         return in_array($this->participation_type, ['donation_only', 'donation_and_volunteer']);

@@ -76,10 +76,16 @@ class GovernorateRegionSeeder extends Seeder
         ];
 
         foreach ($data as $governorateName => $regions) {
-            $governorate = Governorate::create(['name' => $governorateName]);
+            $governorate = Governorate::updateOrCreate(
+                ['name' => $governorateName],
+                ['name' => $governorateName]
+            );
 
             foreach ($regions as $regionName) {
-                $governorate->regions()->create(['name' => $regionName]);
+                $governorate->regions()->updateOrCreate(
+                    ['name' => $regionName],
+                    ['name' => $regionName]
+                );
             }
         }
     }

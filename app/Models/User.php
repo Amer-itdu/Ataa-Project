@@ -26,7 +26,7 @@ class User extends Authenticatable
         'role',
         'user_category',
         'status',
-         'fcm_token',
+        'fcm_token',
     ];
 
     protected $hidden = [
@@ -150,5 +150,27 @@ class User extends Authenticatable
     public function volunteer()
     {
         return $this->hasOne(Volunteer::class);
+    }
+    // داخل User Model
+    public function getAdminBalanceInUSD(): float
+    {
+        $balances = $this->balances ?? [];
+        $totalUSD = 0;
+
+        $rates = [
+            'USD' => 1,
+            'EUR' => 1.07,
+            'SAR' => 0.27,
+            'AED' => 0.27,
+            'EGP' => 0.020,
+            'SYP' => 0.00040,
+        ];
+
+        foreach ($balances as $currency => $amount) {
+            $rate = $rates[$currency] ?? 1;
+            $totalUSD += ($amount * $rate); // التعديل هنا: استخدام الضرب بدلاً من القسمة
+        }
+
+        return round($totalUSD, 2);
     }
 }

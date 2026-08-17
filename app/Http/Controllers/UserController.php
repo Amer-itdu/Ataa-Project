@@ -761,5 +761,53 @@ public function updateFcmToken(Request $request)
         'message' => 'FCM token updated successfully.',
     ]);
 }
+public function getAdminWallet()
+{
+    $user = Auth::user();
+
+    if ($user->role !== 'admin') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Only admins can view admin wallet.'
+        ], 403);
+    }
+
+    $balances = $user->balances ?? [];
+    // Calculate total in USD from balances if model helper is not available
+    $totalUSD = 0.0;
+    foreach ($balances as $b) {
+        // support different balance representations
+        if (is_array($b)) {
+            // try common keys
+            if (isset($b['amount'])) {
+                $totalUSD += (float) $b['amount'];
+            } elseif (isset($b['balance'])) {
+                $totalUSD += (float) $b['balance'];
+            } else {
+                // sum numeric values
+                foreach ($b as $v) {
+                    if (is_numeric($v)) {
+                        $totalUSD += (float) $v;
+                    }
+                }
+            }
+        } elseif (is_object($b)) {
+            if (isset($b->amount)) {
+                $totalUSD += (float) $b->amount;
+            } elseif (isset($b->balance)) {
+                $totalUSD += (float) $b->balance;
+            }
+        } elseif (is_numeric($b)) {
+            $totalUSD += (float) $b;
+        }
+    }
+
+    return response()->json([
+        'success'         => true,
+        'wallet_balances' => $balances,
+        'total_in_usd'    => $totalUSD,
+        'currency'        => 'USD',
+    ], 200);
+}
 
 }

@@ -2,70 +2,18 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
+use App\Models\Campaign;
 use App\Models\User;
 use App\Models\Volunteer;
-use App\Models\Campaign;
-use App\Models\VolunteerCampaign;
+use Illuminate\Database\Seeder;
 
 class VolunteerCampaignsSeeder extends Seeder
 {
     public function run(): void
     {
-        /*
-        |--------------------------------------------------------------------------
-        | 1) جلب المستخدمين (أحمد – ميلاد – سدرة)
-        |--------------------------------------------------------------------------
-        */
-
         $ahmad = User::where('email', 'ahmad.zen@email.com')->first();
         $milad = User::where('email', 'milad.hamad@example.com')->first();
         $sedra = User::where('email', 'sedra.jlilaty@example.com')->first();
-
-        /*
-        |--------------------------------------------------------------------------
-        | 2) إنشاء متطوعين مرتبطين بالمستخدمين
-        |--------------------------------------------------------------------------
-        */
-
-        if ($ahmad) {
-            $volAhmad = Volunteer::updateOrCreate(
-                ['user_id' => $ahmad->id],
-                [
-                    'skills' => 'Management, Logistics',
-                    'description' => 'Experienced in organizing events.',
-                    'status' => 'approved',
-                ]
-            );
-        }
-
-        if ($milad) {
-            $volMilad = Volunteer::updateOrCreate(
-                ['user_id' => $milad->id],
-                [
-                    'skills' => 'First Aid, Field Support',
-                    'description' => 'Ready for field volunteering.',
-                    'status' => 'pending',
-                ]
-            );
-        }
-
-        if ($sedra) {
-            $volSedra = Volunteer::updateOrCreate(
-                ['user_id' => $sedra->id],
-                [
-                    'skills' => 'Teaching, Social Support',
-                    'description' => 'Loves helping children and families.',
-                    'status' => 'approved',
-                ]
-            );
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | 3) جلب الحملات التي أنشأتها في CampaignsTableSeeder
-        |--------------------------------------------------------------------------
-        */
 
         $camp1 = Campaign::where('title', 'Clean Water for Every Village')->first();
         $camp2 = Campaign::where('title', 'Community Health Education Drive')->first();
@@ -73,78 +21,99 @@ class VolunteerCampaignsSeeder extends Seeder
         $camp4 = Campaign::where('title', 'Food Baskets for Families')->first();
         $camp5 = Campaign::where('title', 'Winter Clothing Drive')->first();
 
-        /*
-        |--------------------------------------------------------------------------
-        | 4) ربط المتطوعين بالحملات (ثابت بدون حلقات)
-        |--------------------------------------------------------------------------
-        */
-
-        // أحمد يتطوع لحملة 1 + 2
-        if (isset($volAhmad) && $camp1) {
-            VolunteerCampaign::updateOrCreate(
+        // ahmad
+        if ($ahmad) {
+            $volAhmad = Volunteer::firstOrCreate(
+                ['user_id' => $ahmad->id],
                 [
-                    'volunteer_id' => $volAhmad->id,
-                    'campaign_id' => $camp1->id,
-                ],
-                [
-                    'status' => 'approved',
-                    'assigned_date' => now(),
+                    'phone'              => '0999000002',
+                    'gender'             => 'male',
+                    'governorate_id'     => 1,
+                    'skills'             => ['field_work'],
+                    'status'             => 'approved',
+                    'agreed_to_terms'    => true,
+                    'agreed_to_terms_at' => now(),
                 ]
             );
+
+            if ($camp1 && !$camp1->volunteers()->where('volunteer_id', $volAhmad->id)->exists()) {
+                $camp1->volunteers()->attach($volAhmad->id, [
+                    'status'        => 'approved',
+                    'assigned_date' => now(),
+                ]);
+            }
+
+            if ($camp2 && !$camp2->volunteers()->where('volunteer_id', $volAhmad->id)->exists()) {
+                $camp2->volunteers()->attach($volAhmad->id, [
+                    'status'        => 'pending',
+                    'assigned_date' => null,
+                ]);
+            }
         }
 
-        if (isset($volAhmad) && $camp2) {
-            VolunteerCampaign::updateOrCreate(
+        // milad
+        if ($milad) {
+            $volMilad = Volunteer::firstOrCreate(
+                ['user_id' => $milad->id],
                 [
-                    'volunteer_id' => $volAhmad->id,
-                    'campaign_id' => $camp2->id,
-                ],
-                [
-                    'status' => 'pending',
-                    'assigned_date' => now(),
+                    'phone'              => '0999000003',
+                    'gender'             => 'male',
+                    'governorate_id'     => 2,
+                    'skills'             => ['teaching', 'event_management'],
+                    'status'             => 'approved',
+                    'agreed_to_terms'    => true,
+                    'agreed_to_terms_at' => now(),
                 ]
             );
+
+            if ($camp3 && !$camp3->volunteers()->where('volunteer_id', $volMilad->id)->exists()) {
+                $camp3->volunteers()->attach($volMilad->id, [
+                    'status'        => 'approved',
+                    'assigned_date' => now(),
+                ]);
+            }
         }
 
-        // ميلاد يتطوع لحملة 3
-        if (isset($volMilad) && $camp3) {
-            VolunteerCampaign::updateOrCreate(
+        // sedra
+        if ($sedra) {
+            $volSedra = Volunteer::firstOrCreate(
+                ['user_id' => $sedra->id],
                 [
-                    'volunteer_id' => $volMilad->id,
-                    'campaign_id' => $camp3->id,
-                ],
-                [
-                    'status' => 'approved',
-                    'assigned_date' => now(),
+                    'phone'              => '0999000004',
+                    'gender'             => 'female',
+                    'governorate_id'     => 3,
+                    'skills'             => ['counseling_mental_health'],
+                    'status'             => 'approved',
+                    'agreed_to_terms'    => true,
+                    'agreed_to_terms_at' => now(),
                 ]
             );
+
+            if ($camp4 && !$camp4->volunteers()->where('volunteer_id', $volSedra->id)->exists()) {
+                $camp4->volunteers()->attach($volSedra->id, [
+                    'status'        => 'pending',
+                    'assigned_date' => null,
+                ]);
+            }
+
+            if ($camp5 && !$camp5->volunteers()->where('volunteer_id', $volSedra->id)->exists()) {
+                $camp5->volunteers()->attach($volSedra->id, [
+                    'status'        => 'approved',
+                    'assigned_date' => now(),
+                ]);
+            }
         }
 
-        // سدرة تتطوع لحملة 4 + 5
-        if (isset($volSedra) && $camp4) {
-            VolunteerCampaign::updateOrCreate(
-                [
-                    'volunteer_id' => $volSedra->id,
-                    'campaign_id' => $camp4->id,
-                ],
-                [
-                    'status' => 'pending',
-                    'assigned_date' => now(),
-                ]
-            );
-        }
-
-        if (isset($volSedra) && $camp5) {
-            VolunteerCampaign::updateOrCreate(
-                [
-                    'volunteer_id' => $volSedra->id,
-                    'campaign_id' => $camp5->id,
-                ],
-                [
-                    'status' => 'approved',
-                    'assigned_date' => now(),
-                ]
-            );
-        }
+        // 🔥 تحديث volunteers_joined من الفعلي (هذا هو الحل)
+        collect([$camp1, $camp2, $camp3, $camp4, $camp5])->each(function ($campaign) {
+            if ($campaign) {
+                $approvedCount = $campaign->volunteers()
+                    ->wherePivot('status', 'approved')
+                    ->count();
+                
+                // 🔥 حدّث volunteers_joined بالعدد الفعلي
+                $campaign->update(['volunteers_joined' => $approvedCount]);
+            }
+        });
     }
 }

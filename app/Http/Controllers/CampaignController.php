@@ -194,43 +194,50 @@ class CampaignController extends Controller
     |--------------------------------------------------------------------------
     */
     public function getCampaignDetails($id)
-    {
-        $campaign = Campaign::with(['media', 'admin'])->find($id);
+{
+    $campaign = Campaign::with(['media', 'admin'])->find($id);
 
-        if (!$campaign) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Campaign not found.'
-            ], 404);
-        }
-
-        $approvedVolunteers = $campaign->volunteers()
-            ->wherePivot('status', 'approved')
-            ->count();
-
+    if (!$campaign) {
         return response()->json([
-            'success' => true,
-            'campaign' => [
-                'id' => $campaign->id,
-                'title' => $campaign->title,
-                'description' => $campaign->description,
-                'type' => $campaign->type,
-                'participation_type' => $campaign->participation_type,
-                'accepts_donations' => $campaign->acceptsDonations(),
-                'accepts_volunteers' => $campaign->acceptsVolunteers(),
-                'status' => $campaign->status,
-                'amount_needed' => $campaign->amount_needed,
-                'amount_collected' => $campaign->amount_collected,
-                'volunteers_needed' => $campaign->volunteers_needed,
-                'start_date' => $campaign->start_date,
-                'end_date' => $campaign->end_date,
-                'progress' => $campaign->progress,
-                'time_remaining' => $campaign->time_remaining,
-                'approved_volunteers_count' => $approvedVolunteers,
-                'media' => $campaign->media,
-            ]
-        ], 200);
+            'success' => false,
+            'message' => 'Campaign not found.'
+        ], 404);
     }
+
+    $approvedVolunteers = $campaign->volunteers()
+        ->wherePivot('status', 'approved')
+        ->count();
+
+    // 🔥 حساب نسبة المتطوعين
+    $volunteersProgress = 0;
+    if ($campaign->volunteers_needed !== null && $campaign->volunteers_needed > 0) {
+        $volunteersProgress = round(($campaign->volunteers_joined / $campaign->volunteers_needed) * 100, 2);
+    }
+
+    return response()->json([
+        'success' => true,
+        'campaign' => [
+            'id'                     => $campaign->id,
+            'title'                  => $campaign->title,
+            'description'            => $campaign->description,
+            'type'                   => $campaign->type,
+            'participation_type'     => $campaign->participation_type,
+            'accepts_donations'      => $campaign->acceptsDonations(),
+            'accepts_volunteers'     => $campaign->acceptsVolunteers(),
+            'status'                 => $campaign->status,
+            'amount_needed'          => $campaign->amount_needed,
+            'amount_collected'       => $campaign->amount_collected,
+            'progress'               => $campaign->progress,
+            'time_remaining'         => $campaign->time_remaining,
+            'volunteers_needed'      => $campaign->volunteers_needed,
+            'volunteers_joined'      => $campaign->volunteers_joined,
+            'volunteers_progress'    => $volunteersProgress,  // 🔥 جديد
+            'volunteers_remaining'   => max(($campaign->volunteers_needed ?? 0) - $campaign->volunteers_joined, 0),  // 🔥 جديد
+            'approved_volunteers_count' => $approvedVolunteers,
+            'media'                  => $campaign->media,
+        ]
+    ], 200);
+}
 
     /*
     |--------------------------------------------------------------------------
