@@ -818,4 +818,54 @@ class VolunteerController extends Controller
             $campaign->update(['status' => 'completed_volunteers']);
         }
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 15) تعليق متطوع عام (أدمن فقط)
+    |--------------------------------------------------------------------------
+    */
+    public function suspendGeneralVolunteer(\Illuminate\Http\Request $request, $volunteerId)
+    {
+        $user = Auth::user();
+
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can suspend volunteers.'
+            ], 403);
+        }
+
+        $volunteer = Volunteer::find($volunteerId);
+
+        if (!$volunteer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Volunteer not found.'
+            ], 404);
+        }
+
+        if (!$volunteer->general_application) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This record is not a general volunteer application.'
+            ], 400);
+        }
+
+        if ($volunteer->status === 'suspended') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Volunteer is already suspended.'
+            ], 400);
+        }
+
+        $volunteer->update([
+            'status' => 'suspended'
+        ]);
+
+        return response()->json([
+            'success'   => true,
+            'message'   => 'Volunteer has been suspended successfully.',
+            'volunteer' => $volunteer->load('user:id,first_name,last_name,email,phone', 'governorate:id,name'),
+        ], 200);
+    }
 }

@@ -92,6 +92,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/volunteer-applications/filter',    [VolunteerController::class, 'filterVolunteerApplications']);
     // قبول/رفض طلبات التطوع العامة (أدمن)
     Route::patch('/volunteer-applications/{volunteerId}', [VolunteerController::class, 'reviewVolunteerApplication']);
+    
+    // تعليق متطوع عام (أدمن فقط)
+    Route::post('/volunteersuspend/{volunteerId}', [VolunteerController::class, 'suspendGeneralVolunteer']);
 
     // التطوع لحملة
     Route::post('/campaigns/volunteer/{campaignId}', [VolunteerController::class, 'volunteerForCampaign']);
