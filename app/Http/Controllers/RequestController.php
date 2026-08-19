@@ -811,4 +811,52 @@ class RequestController extends Controller
             'request' => $requestModel
         ], 200);
     }
+
+public function rejectRequest(\Illuminate\Http\Request $request, $requestId)
+    {
+        $user = Auth::user();
+
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can reject beneficiaries.'
+            ], 403);
+        }
+
+        $request->validate([
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $requestModel = RequestModel::find($requestId);
+
+        if (!$requestModel) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Request not found.'
+            ], 404);
+        }
+
+        if ($requestModel->status === 'rejected') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This request is already rejected.'
+            ], 400);
+        }
+
+        $requestModel->update([
+            'status'            => 'rejected',
+            'status_request'    => 'closed',
+            'rejection_reason'  => $request->get('reason') ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Beneficiary request rejected successfully.',
+            'request' => $requestModel,
+        ], 200);
+    }
+
+
+
+    
 }
