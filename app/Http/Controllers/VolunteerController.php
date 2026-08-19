@@ -509,71 +509,71 @@ class VolunteerController extends Controller
     | 12) قبول / رفض متطوع بحملة معينة (أدمن)
     |--------------------------------------------------------------------------
     */
- public function updateVolunteerStatus(\Illuminate\Http\Request $request, $campaignId, $volunteerId)
-{
-    $user = Auth::user();
+    public function updateVolunteerStatus(\Illuminate\Http\Request $request, $campaignId, $volunteerId)
+    {
+        $user = Auth::user();
 
-    if ($user->role !== 'admin') {
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can update volunteer status.'
+            ], 403);
+        }
+
+        $request->validate([
+            'status' => 'required|in:approved,rejected,pending',
+        ]);
+
+        $campaign = Campaign::find($campaignId);
+
+        if (!$campaign) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Campaign not found.'
+            ], 404);
+        }
+
+        $pivot = $campaign->volunteers()->where('volunteer_id', $volunteerId)->first();
+
+        if (!$pivot) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Volunteer not found in this campaign.'
+            ], 404);
+        }
+
+        $oldStatus = $pivot->pivot->status;
+        $newStatus = $request->status;
+
+        if ($oldStatus === $newStatus) {
+            return response()->json([
+                'success' => false,
+                'message' => "Volunteer is already {$newStatus}."
+            ], 400);
+        }
+
+        // 🔥 تحديث الـ pivot
+        $campaign->volunteers()->updateExistingPivot($volunteerId, [
+            'status'        => $newStatus,
+            'assigned_date' => $newStatus === 'approved' ? now() : null,
+        ]);
+
+        // 🔥 تحديث الـ count يدويّاً
+        if ($oldStatus !== 'approved' && $newStatus === 'approved') {
+            $campaign->increment('volunteers_joined');
+        } elseif ($oldStatus === 'approved' && $newStatus !== 'approved') {
+            $campaign->decrement('volunteers_joined');
+        }
+
+        $campaign->refresh();
+        $this->checkCampaignCompletion($campaign);
+
         return response()->json([
-            'success' => false,
-            'message' => 'Only admins can update volunteer status.'
-        ], 403);
+            'success'           => true,
+            'message'           => "Volunteer {$newStatus} successfully.",
+            'volunteers_joined' => $campaign->volunteers_joined,
+        ], 200);
     }
-
-    $request->validate([
-        'status' => 'required|in:approved,rejected,pending',
-    ]);
-
-    $campaign = Campaign::find($campaignId);
-
-    if (!$campaign) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Campaign not found.'
-        ], 404);
-    }
-
-    $pivot = $campaign->volunteers()->where('volunteer_id', $volunteerId)->first();
-
-    if (!$pivot) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Volunteer not found in this campaign.'
-        ], 404);
-    }
-
-    $oldStatus = $pivot->pivot->status;
-    $newStatus = $request->status;
-
-    if ($oldStatus === $newStatus) {
-        return response()->json([
-            'success' => false,
-            'message' => "Volunteer is already {$newStatus}."
-        ], 400);
-    }
-
-    // 🔥 تحديث الـ pivot
-    $campaign->volunteers()->updateExistingPivot($volunteerId, [
-        'status'        => $newStatus,
-        'assigned_date' => $newStatus === 'approved' ? now() : null,
-    ]);
-
-    // 🔥 تحديث الـ count يدويّاً
-    if ($oldStatus !== 'approved' && $newStatus === 'approved') {
-        $campaign->increment('volunteers_joined');
-    } elseif ($oldStatus === 'approved' && $newStatus !== 'approved') {
-        $campaign->decrement('volunteers_joined');
-    }
-
-    $campaign->refresh();
-    $this->checkCampaignCompletion($campaign);
-
-    return response()->json([
-        'success'           => true,
-        'message'           => "Volunteer {$newStatus} successfully.",
-        'volunteers_joined' => $campaign->volunteers_joined,
-    ], 200);
-}
 
     /*
     |--------------------------------------------------------------------------
@@ -866,6 +866,184 @@ class VolunteerController extends Controller
             'success'   => true,
             'message'   => 'Volunteer has been suspended successfully.',
             'volunteer' => $volunteer->load('user:id,first_name,last_name,email,phone', 'governorate:id,name'),
+        ], 200);
+    }
+    /**
+     * احصل على جميع المتطوعين للحملات (general_application = 0) مع عدد الحملات والساعات
+     */
+    public function getAllVolunteersSummary(Request $request)
+    {
+        $user = Auth::user();
+
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can view all volunteers.'
+            ], 403);
+        }
+
+        $request->validate([
+            'sort_by'  => 'nullable|in:created_at,total_hours,campaigns_count',
+            'sort_dir' => 'nullable|in:asc,desc',
+        ]);
+
+        $query = Volunteer::where('general_application', 0)  // 🔥 المتطوعين للحملات فقط
+            ->where('status', 'approved')  // مقبولين فقط
+            ->with([
+                'user:id,first_name,last_name,email,phone',
+                'governorate:id,name',
+                'campaigns' => function ($q) {
+                    $q->wherePivot('status', 'approved');
+                },
+                'hours'
+            ]);
+
+        // جلب البيانات
+        $volunteers = $query->get();
+
+        // تنسيق البيانات
+        $formattedVolunteers = $volunteers->map(function ($volunteer) {
+            // عدد الحملات المعتمدة
+            $campaignsCount = $volunteer->campaigns()
+                ->wherePivot('status', 'approved')
+                ->count();
+
+            // إجمالي ساعات التطوع
+            $totalHours = $volunteer->totalHours();
+
+            return [
+                'volunteer_id' => $volunteer->id,
+                'name' => trim($volunteer->user->first_name . ' ' . $volunteer->user->last_name),
+                'email' => $volunteer->user->email,
+                'phone' => $volunteer->user->phone ?? 'N/A',
+                'gender' => $volunteer->gender,
+                'occupation' => $volunteer->occupation,
+                'governorate' => $volunteer->governorate->name ?? null,
+                'skills' => $volunteer->skills,
+                'status' => $volunteer->status,
+                'campaigns_count' => $campaignsCount,
+                'total_hours' => round($totalHours, 2),
+                'applied_at' => $volunteer->created_at->format('Y-m-d H:i:s'),
+            ];
+        });
+
+        // الترتيب
+        $sortBy  = $request->get('sort_by', 'created_at');
+        $sortDir = $request->get('sort_dir', 'desc');
+
+        if ($sortBy === 'total_hours') {
+            $formattedVolunteers = $formattedVolunteers->sortBy('total_hours');
+            if ($sortDir === 'desc') {
+                $formattedVolunteers = $formattedVolunteers->reverse();
+            }
+        } elseif ($sortBy === 'campaigns_count') {
+            $formattedVolunteers = $formattedVolunteers->sortBy('campaigns_count');
+            if ($sortDir === 'desc') {
+                $formattedVolunteers = $formattedVolunteers->reverse();
+            }
+        } else {
+            $formattedVolunteers = $formattedVolunteers->sortByDesc('applied_at');
+            if ($sortDir === 'asc') {
+                $formattedVolunteers = $formattedVolunteers->reverse();
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'count' => $formattedVolunteers->count(),
+            'data' => $formattedVolunteers->values()
+        ], 200);
+    }
+
+    /**
+     * احصل على حملات متطوع معين (general_application = 0)
+     */
+    public function getVolunteerCampaigns($volunteerId, Request $request)
+    {
+        $user = Auth::user();
+
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can view volunteer campaigns.'
+            ], 403);
+        }
+
+        $request->validate([
+            'status' => 'nullable|in:pending,approved,rejected',
+            'sort_by' => 'nullable|in:created_at,title',
+            'sort_dir' => 'nullable|in:asc,desc',
+        ]);
+
+        // 🔥 المتطوع لازم يكون general_application = 0
+        $volunteer = Volunteer::where('id', $volunteerId)
+            ->where('general_application', 0)
+            ->with('user:id,first_name,last_name')
+            ->first();
+
+        if (!$volunteer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Volunteer not found or invalid.'
+            ], 404);
+        }
+
+        $query = $volunteer->campaigns();
+
+        // فلترة حسب الحالة
+        if ($request->filled('status')) {
+            $query->wherePivot('status', $request->status);
+        }
+
+        $campaigns = $query->get();
+
+        // تنسيق البيانات
+        $formattedCampaigns = $campaigns->map(function ($campaign) use ($volunteer) {
+            $hoursInCampaign = $volunteer->hours()
+                ->where('campaign_id', $campaign->id)
+                ->sum('hours');
+
+            return [
+                'campaign_id' => $campaign->id,
+                'title' => $campaign->title,
+                'type' => $campaign->type,
+                'status' => $campaign->status,
+                'participation_type' => $campaign->participation_type,
+                'amount_needed' => round($campaign->amount_needed, 2),
+                'amount_collected' => round($campaign->amount_collected, 2),
+                'progress' => $campaign->progress,
+                'volunteers_needed' => $campaign->volunteers_needed,
+                'volunteers_joined' => $campaign->volunteers_joined,
+                'volunteer_status' => $campaign->pivot->status,
+                'assigned_date' => $campaign->pivot->assigned_date,
+                'available_time' => $campaign->pivot->available_time,
+                'notes' => $campaign->pivot->notes,
+                'hours_in_campaign' => round($hoursInCampaign, 2),
+            ];
+        });
+
+        // الترتيب
+        $sortBy = $request->get('sort_by', 'created_at');
+        $sortDir = $request->get('sort_dir', 'desc');
+
+        if ($sortBy === 'title') {
+            $formattedCampaigns = $formattedCampaigns->sortBy('title');
+        } else {
+            $formattedCampaigns = $formattedCampaigns->sortByDesc('assigned_date');
+        }
+
+        if ($sortDir === 'asc') {
+            $formattedCampaigns = $formattedCampaigns->reverse();
+        }
+
+        return response()->json([
+            'success' => true,
+            'volunteer' => [
+                'volunteer_id' => $volunteer->id,
+                'name' => trim($volunteer->user->first_name . ' ' . $volunteer->user->last_name),
+            ],
+            'campaigns_count' => $formattedCampaigns->count(),
+            'campaigns' => $formattedCampaigns->values()
         ], 200);
     }
 }

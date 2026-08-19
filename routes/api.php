@@ -43,7 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::put('closeRequest/{id}', [RequestController::class, 'closeRequest']);
         Route::put('acceptRequest/{id}', [RequestController::class, 'acceptRequest']);
-        Route::patch('rejectRequest/{requestId}',[RequestController::class, 'rejectRequest']);
+        Route::patch('rejectRequest/{requestId}', [RequestController::class, 'rejectRequest']);
     });
 
 
@@ -89,10 +89,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/volunteer-applications/approved',  [VolunteerController::class, 'getApprovedVolunteerApplications']);
     Route::get('/volunteer-applications/rejected',  [VolunteerController::class, 'getRejectedVolunteerApplications']);
     Route::get('/volunteer-applications/suspended', [VolunteerController::class, 'getSuspendedVolunteerApplications']);
+    //تابع متطوعين الجمعيه
     Route::get('/volunteer-applications/filter',    [VolunteerController::class, 'filterVolunteerApplications']);
     // قبول/رفض طلبات التطوع العامة (أدمن)
     Route::patch('/volunteer-applications/{volunteerId}', [VolunteerController::class, 'reviewVolunteerApplication']);
-    
+
     // تعليق متطوع عام (أدمن فقط)
     Route::post('/volunteersuspend/{volunteerId}', [VolunteerController::class, 'suspendGeneralVolunteer']);
 
@@ -117,7 +118,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/my-campaigns/pending',  [VolunteerController::class, 'getMyPendingCampaigns']);
     Route::get('/my-volunteer-hours',    [VolunteerController::class, 'getMyVolunteerHours']);
     Route::get('/approved-general-volunteers', [VolunteerController::class, 'getApprovedGeneralVolunteerApplications']);
-    Route::get('/all-volunteers', [VolunteerController::class, 'getAllVolunteers']);
+    //new 8/19 
+    //from
+    //تابع متطوعين الحملات
+    Route::get('/volunteers/summary', [VolunteerController::class, 'getAllVolunteersSummary']);
+
+    // حملات متطوع معين
+    Route::get('/volunteerscampaigns/{volunteerId}', [VolunteerController::class, 'getVolunteerCampaigns']);
+    //to
 });
 //Dashboard routes dashboard 
 //Dashboard routes
@@ -141,7 +149,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::get('/getUserById/{id}', [UserController::class, 'getUserById']);
     Route::get('/getAllUsers', [UserController::class, 'getallUsers']);
+    
     Route::post('/addBalanceToUser/{userId}', [UserController::class, 'addBalanceToUser']);
+    //new 8/19
     Route::get('/getAdminWallet', [UserController::class, 'getAdminWallet']);
     //new
     Route::post('/setRejected/{id}', [UserController::class, 'setRejected']);
@@ -165,7 +175,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::put('closeRequest/{id}', [RequestController::class, 'closeRequest']);
     Route::put('acceptRequest/{id}', [RequestController::class, 'acceptRequest']);
-        Route::patch('/rejectRequest/{requestId}', [RequestController::class, 'rejectRequest']);
+    Route::patch('/rejectRequest/{requestId}', [RequestController::class, 'rejectRequest']);
 
     //marwa
     Route::get('getopenacceptedrequests', [RequestController::class, 'getOpenAcceptedRequests']);
@@ -216,8 +226,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/quickDonate', [DonationController::class, 'quickDonateToAssociation']);
     Route::post('/donate/{type}/{id}', [DonationController::class, 'donate'])
         ->where('type', 'request|campaign');
-                Route::get('/donations/all', [DonationController::class, 'getAllDonations']);
-
+    Route::get('/donations/all', [DonationController::class, 'getAllDonations']);
 });
 
 // Campaign Disbursal APIs
@@ -227,8 +236,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/disburse/campaigns/pending', [CampaignDisbursalController::class, 'getPendingCampaignDisbursements']);
     Route::post('/disburse/request/{requestId}', [CampaignDisbursalController::class, 'disburseRequest']);
     Route::get('/disburse/requests/pending', [CampaignDisbursalController::class, 'getPendingRequestDisbursements']);
-    
-    
+    Route::post('/disburse/campaigns-all', [CampaignDisbursalController::class, 'disburseCampaigns']);
+    Route::post('/disburse/requests-all', [CampaignDisbursalController::class, 'disburseRequests']);
+    Route::post('/disburse/all', [CampaignDisbursalController::class, 'disburseAll']);
 });
 Route::middleware('auth:sanctum')->group(function () {
     // تقارير الصرف
