@@ -17,6 +17,7 @@ use App\Models\SchoolStudent;
 use App\Models\UniversityStudent;
 use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class RequestController extends Controller
@@ -800,7 +801,7 @@ class RequestController extends Controller
         );
     }
 } catch (\Exception $e) {
-    \Log::warning('Notification failed but request accepted: ' . $e->getMessage());
+    Log::warning('Notification failed but request accepted: ' . $e->getMessage());
 }
 
 

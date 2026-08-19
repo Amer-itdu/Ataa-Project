@@ -123,9 +123,12 @@ class DonationController extends Controller
     */
     private function donateToRequest($user, $validated, $amountInUSD, $id)
     {
-        $requestModel = RequestModel::find($id);
+        DB::beginTransaction();
+
+        $requestModel = RequestModel::lockForUpdate()->find($id);
 
         if (!$requestModel) {
+            DB::rollBack();
             return $this->refundAndFail($user, $validated, 'Request not found.');
         }
 
@@ -138,36 +141,57 @@ class DonationController extends Controller
         };
 
         if (!$target) {
+            DB::rollBack();
             return $this->refundAndFail($user, $validated, 'Invalid request type.');
         }
 
-        $donatedBefore = $target->donations()->sum('amount');
-        $remaining     = $requestModel->required_amount - $donatedBefore;
-        $amountToUse   = min($amountInUSD, $remaining);
-        $extra         = $amountInUSD - $amountToUse;
+        $required = (float) $requestModel->required_amount;
+        $collected = (float) $requestModel->amount_collected;
+        $remaining = max($required - $collected, 0);
 
-        $requestModel->user->addBalance('USD', $amountToUse);
-
-        if ($extra > 0) {
-            $user->addBalance('USD', $extra);
+        if ($remaining <= 0 || $requestModel->status_request === 'closed') {
+            DB::rollBack();
+            return $this->refundAndFail($user, $validated, 'This request is already fully funded.');
         }
 
-        $donor = $user->donor ?? Donor::create(['user_id' => $user->id, 'anonymous' => false]);
+        $amountToUse = min((float) $amountInUSD, $remaining);
+        $extra = (float) $amountInUSD - $amountToUse;
 
-        $donation = $target->donations()->create([
-            'donor_id'          => $donor->id,
-            'amount'            => $amountToUse,
-            'currency'          => 'USD',
-            'original_amount'   => $validated['amount'],
-            'original_currency' => $validated['currency'],
-        ]);
+        try {
+            $donor = $user->donor ?? Donor::create([
+                'user_id' => $user->id,
+                'anonymous' => false,
+            ]);
 
-        $donated  = $target->donations()->sum('amount');
-        $required = $requestModel->required_amount;
+            $donation = $target->donations()->create([
+                'donor_id'          => $donor->id,
+                'amount'            => $amountToUse,
+                'currency'          => 'USD',
+                'original_amount'   => $validated['amount'],
+                'original_currency' => $validated['currency'],
+            ]);
 
-        if ($donated >= $required) {
-            $requestModel->update(['status_request' => 'closed']);
+            $requestModel->update([
+                'amount_collected' => $collected + $amountToUse,
+                'status_request' => ($collected + $amountToUse) >= $required ? 'closed' : 'open',
+            ]);
+
+            if ($requestModel->user) {
+                $requestModel->user->addBalance('USD', $amountToUse);
+            }
+
+            if ($extra > 0) {
+                $user->addBalance('USD', $extra);
+            }
+
+            DB::commit();
+        } catch (\Throwable $exception) {
+            DB::rollBack();
+
+            return $this->refundAndFail($user, $validated, 'Donation could not be completed.');
         }
+
+        $donated = $collected + $amountToUse;
 
         return response()->json([
             'success'                     => true,
@@ -187,45 +211,80 @@ class DonationController extends Controller
     */
     private function donateToCampaign($user, $validated, $amountInUSD, $id)
     {
-        $campaign = Campaign::find($id);
+        DB::beginTransaction();
+
+        $campaign = Campaign::lockForUpdate()->find($id);
 
         if (!$campaign) {
+            DB::rollBack();
             return $this->refundAndFail($user, $validated, 'Campaign not found.');
         }
 
         if (!$campaign->acceptsDonations()) {
+            DB::rollBack();
             return $this->refundAndFail($user, $validated, 'This campaign does not accept donations.');
         }
 
         if ($campaign->status !== 'open') {
+            DB::rollBack();
             return $this->refundAndFail($user, $validated, 'Campaign is not active.');
         }
 
-        $remaining   = $campaign->amount_needed - $campaign->amount_collected;
+        $admin = User::find(1);
+
+        if (!$admin) {
+            DB::rollBack();
+            return $this->refundAndFail($user, $validated, 'Admin account not found.');
+        }
+
+        $required    = (float) $campaign->amount_needed;
+        $collected   = (float) $campaign->amount_collected;
+        $remaining   = max($required - $collected, 0);
+
+        if ($remaining <= 0) {
+            DB::rollBack();
+            return $this->refundAndFail($user, $validated, 'This campaign is already fully funded.');
+        }
+
         $amountToUse = min($amountInUSD, $remaining);
         $extra       = $amountInUSD - $amountToUse;
 
-        if ($extra > 0) {
-            $user->addBalance('USD', $extra);
+        try {
+            $donor = $user->donor ?? Donor::create([
+                'user_id' => $user->id,
+                'anonymous' => false,
+            ]);
+
+            $donation = $campaign->donations()->create([
+                'donor_id'          => $donor->id,
+                'amount'            => $amountToUse,
+                'currency'          => 'USD',
+                'original_amount'   => $validated['amount'],
+                'original_currency' => $validated['currency'],
+            ]);
+
+            $campaign->update([
+                'amount_collected' => $collected + $amountToUse,
+            ]);
+
+            // Transfer the used donation amount to the association admin.
+            $admin->addBalance('USD', $amountToUse);
+
+            if ($extra > 0) {
+                $user->addBalance('USD', $extra);
+            }
+
+            $campaign->refresh();
+            $this->checkCampaignCompletion($campaign);
+
+            DB::commit();
+        } catch (\Throwable $exception) {
+            DB::rollBack();
+
+            return $this->refundAndFail($user, $validated, 'Donation could not be completed.');
         }
 
-        $donor = $user->donor ?? Donor::create(['user_id' => $user->id, 'anonymous' => false]);
-
-        $donation = $campaign->donations()->create([
-            'donor_id'          => $donor->id,
-            'amount'            => $amountToUse,
-            'currency'          => 'USD',
-            'original_amount'   => $validated['amount'],
-            'original_currency' => $validated['currency'],
-        ]);
-
-        $campaign->increment('amount_collected', $amountToUse);
-        $campaign->refresh();
-
-        $this->checkCampaignCompletion($campaign);
-
-        $required = $campaign->amount_needed;
-        $donated  = $campaign->amount_collected;
+        $donated = (float) $campaign->amount_collected;
 
         return response()->json([
             'success'                     => true,
