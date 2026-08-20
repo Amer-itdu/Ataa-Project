@@ -15,6 +15,47 @@ use Illuminate\Support\Facades\DB;
 class DonationController extends Controller
 {
 
+    public function getMonthlyDonations($year, $month)
+    {
+        if ((int) $month < 1 || (int) $month > 12 || (int) $year < 2000) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid year or month.',
+            ], 400);
+        }
+
+        $donations = Donation::with(['donor.user', 'donationable'])
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function ($donation) {
+                $target = $donation->donationable;
+                $requestModel = $target?->request;
+
+                return [
+                    'donation_id' => $donation->id,
+                    'donor' => $donation->donor?->user,
+                    'amount_usd' => $donation->amount,
+                    'original_amount' => $donation->original_amount,
+                    'original_currency' => $donation->original_currency,
+                    'donationable_type' => class_basename($donation->donationable_type),
+                    'donationable_id' => $donation->donationable_id,
+                    'request_id' => $requestModel?->id,
+                    'beneficiary' => $requestModel?->beneficiary,
+                    'date' => $donation->created_at?->format('Y-m-d H:i:s'),
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'period' => "$month/$year",
+            'donations_count' => $donations->count(),
+            'total_amount_usd' => round($donations->sum('amount_usd'), 2),
+            'data' => $donations->values(),
+        ]);
+    }
+
     public function quickDonateToAssociation(Request $request)
     {
         /** @var User|null $user */

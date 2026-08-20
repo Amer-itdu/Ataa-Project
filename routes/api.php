@@ -117,6 +117,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/my-campaigns/approved', [VolunteerController::class, 'getMyApprovedCampaigns']);
     Route::get('/my-campaigns/pending',  [VolunteerController::class, 'getMyPendingCampaigns']);
     Route::get('/my-volunteer-hours',    [VolunteerController::class, 'getMyVolunteerHours']);
+    Route::get('/volunteer/certificate', [VolunteerController::class, 'issueVolunteerCertificate']);
     Route::get('/approved-general-volunteers', [VolunteerController::class, 'getApprovedGeneralVolunteerApplications']);
     //new 8/19 
     //from
@@ -127,6 +128,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/volunteerscampaigns/{volunteerId}', [VolunteerController::class, 'getVolunteerCampaigns']);
     //to
 });
+Route::get('/volunteers/certificates/{token}', [VolunteerController::class, 'verifyVolunteerCertificate']);
 //Dashboard routes dashboard 
 //Dashboard routes
 //Dashboard routes
@@ -245,4 +247,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/reports/campaigns-disbursement/{year}/{month}', [CampaignDisbursalController::class, 'getCampaignsDisbursementReport']);
     Route::get('/reports/requests-disbursement/{year}/{month}', [CampaignDisbursalController::class, 'getRequestsDisbursementReport']);
     Route::get('/reports/complete-disbursement/{year}/{month}', [CampaignDisbursalController::class, 'getCompleteDisbursementReport']);
+    // تقارير المستفيدين والتبرعات
+    //new 8/20
+    Route::get('/reports/beneficiaries/{year}/{month}', [BeneficiaryController::class, 'getMonthlyBeneficiaries']);
+    Route::get('/reports/donations/{year}/{month}', [DonationController::class, 'getMonthlyDonations']);
+});
+//new 8/20
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/orphanssponsor/{orphan_id}', [RequestController::class, 'sponsorOrphan']);
+    Route::get('/orphanssponsorship-info/{orphan_id}', [RequestController::class, 'sponsorshipInfo']);
+    Route::delete('/orphanssponsor/{orphan_id}', [RequestController::class, 'cancelSponsorship']);
+    Route::get('/orphans/sponsored/list', [RequestController::class, 'getSponsoredOrphans']);
+    Route::get('/orphans/my-sponsored/list', [RequestController::class, 'getMySponsoredOrphans']);
+    Route::get('/reports/beneficiaries/{year}/{month}', [BeneficiaryController::class, 'getMonthlyBeneficiaries']);
+    Route::get('/reports/donations/{year}/{month}', [DonationController::class, 'getMonthlyDonations']);
 });

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreBeneficiaryRequest;
 use App\Models\Beneficiary;
+use App\Models\Donation;
 use Illuminate\Http\Request;
 
 class BeneficiaryController extends Controller
@@ -83,6 +84,47 @@ public function destroy($id)
 
     return response()->json([
         'message' => 'Beneficiary deleted successfully'
+    ]);
+}
+
+public function getMonthlyBeneficiaries($year, $month)
+{
+    if ((int) $month < 1 || (int) $month > 12 || (int) $year < 2000) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid year or month.',
+        ], 400);
+    }
+
+    $donations = Donation::with(['donor.user', 'donationable'])
+        ->whereYear('created_at', $year)
+        ->whereMonth('created_at', $month)
+        ->orderByDesc('created_at')
+        ->get()
+        ->filter(fn ($donation) => $donation->donationable?->request?->beneficiary);
+
+    $beneficiaries = $donations->groupBy(fn ($donation) => $donation->donationable->request->beneficiary->id)
+        ->map(function ($beneficiaryDonations) {
+            $beneficiary = $beneficiaryDonations->first()->donationable->request->beneficiary;
+
+            return [
+                'beneficiary' => $beneficiary,
+                'requests_count' => $beneficiaryDonations
+                    ->pluck('donationable.request.id')
+                    ->unique()
+                    ->count(),
+                'donations_count' => $beneficiaryDonations->count(),
+                'total_amount_usd' => round($beneficiaryDonations->sum('amount'), 2),
+            ];
+        })
+        ->values();
+
+    return response()->json([
+        'success' => true,
+        'period' => "$month/$year",
+        'beneficiaries_count' => $beneficiaries->count(),
+        'total_amount_usd' => round($donations->sum('amount'), 2),
+        'data' => $beneficiaries,
     ]);
 }
 
