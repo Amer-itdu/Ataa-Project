@@ -9,6 +9,7 @@ use App\Models\Campaign;
 use App\Models\Volunteer;
 use App\Models\VolunteerHour;
 use Illuminate\Http\Request;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
 
 class VolunteerController extends Controller
@@ -106,53 +107,73 @@ class VolunteerController extends Controller
     | 3) قبول / رفض / تعليق طلب تطوع عام (أدمن)
     |--------------------------------------------------------------------------
     */
-    public function reviewVolunteerApplication(\Illuminate\Http\Request $request, $volunteerId)
-    {
-        $user = Auth::user();
+ public function reviewVolunteerApplication(\Illuminate\Http\Request $request, $volunteerId)
+{
+    $user = Auth::user();
 
-        if ($user->role !== 'admin') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only admins can review volunteer applications.'
-            ], 403);
-        }
-
-        $request->validate([
-            'status' => 'required|in:approved,rejected,pending,suspended',
-        ]);
-
-        $volunteer = Volunteer::find($volunteerId);
-
-        if (!$volunteer) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Volunteer application not found.'
-            ], 404);
-        }
-
-        // لا يمكن مراجعة سجل لم يقدّم أصلاً طلب تطوع عام
-        if (!$volunteer->general_application) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This record is not a general volunteer application.'
-            ], 400);
-        }
-
-        if ($volunteer->status === $request->status) {
-            return response()->json([
-                'success' => false,
-                'message' => "Application is already {$request->status}."
-            ], 400);
-        }
-
-        $volunteer->update(['status' => Volunteer::normalizeStatus($request->status)]);
-
+    if ($user->role !== 'admin') {
         return response()->json([
-            'success'   => true,
-            'message'   => "Volunteer application {$request->status} successfully.",
-            'volunteer' => $volunteer,
-        ], 200);
+            'success' => false,
+            'message' => 'Only admins can review volunteer applications.'
+        ], 403);
     }
+
+    $request->validate([
+        'status' => 'required|in:approved,rejected,pending,suspended',
+    ]);
+
+    $volunteer = Volunteer::find($volunteerId);
+
+    if (!$volunteer) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Volunteer application not found.'
+        ], 404);
+    }
+
+    // لا يمكن مراجعة سجل لم يقدّم أصلاً طلب تطوع عام
+    if (!$volunteer->general_application) {
+        return response()->json([
+            'success' => false,
+            'message' => 'This record is not a general volunteer application.'
+        ], 400);
+    }
+
+    if ($volunteer->status === $request->status) {
+        return response()->json([
+            'success' => false,
+            'message' => "Application is already {$request->status}."
+        ], 400);
+    }
+
+    $volunteer->update(['status' => Volunteer::normalizeStatus($request->status)]);
+
+    // 🔔 إرسال إشعار للمتطوع
+    try {
+        if ($volunteer->user) {
+            $statusMessages = [
+                'approved'  => 'تم قبول طلب تطوعك، مبروك!',
+                'rejected'  => 'نأسف، تم رفض طلب تطوعك.',
+                'pending'   => 'طلب تطوعك قيد المراجعة.',
+                'suspended' => 'تم تعليق طلب تطوعك.',
+            ];
+
+            app(NotificationService::class)->sendToUser(
+                $volunteer->user,
+                'تحديث حالة طلب التطوع',
+                $statusMessages[$request->status] ?? 'تم تحديث حالة طلب تطوعك.'
+            );
+        }
+    } catch (\Exception $e) {
+        \Log::warning('Notification failed but volunteer application reviewed: ' . $e->getMessage());
+    }
+
+    return response()->json([
+        'success'   => true,
+        'message'   => "Volunteer application {$request->status} successfully.",
+        'volunteer' => $volunteer,
+    ], 200);
+}
 
     /*
     |--------------------------------------------------------------------------
@@ -509,71 +530,90 @@ class VolunteerController extends Controller
     | 12) قبول / رفض متطوع بحملة معينة (أدمن)
     |--------------------------------------------------------------------------
     */
-    public function updateVolunteerStatus(\Illuminate\Http\Request $request, $campaignId, $volunteerId)
-    {
-        $user = Auth::user();
+   public function updateVolunteerStatus(\Illuminate\Http\Request $request, $campaignId, $volunteerId)
+{
+    $user = Auth::user();
 
-        if ($user->role !== 'admin') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only admins can update volunteer status.'
-            ], 403);
-        }
-
-        $request->validate([
-            'status' => 'required|in:approved,rejected,pending',
-        ]);
-
-        $campaign = Campaign::find($campaignId);
-
-        if (!$campaign) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Campaign not found.'
-            ], 404);
-        }
-
-        $pivot = $campaign->volunteers()->where('volunteer_id', $volunteerId)->first();
-
-        if (!$pivot) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Volunteer not found in this campaign.'
-            ], 404);
-        }
-
-        $oldStatus = $pivot->pivot->status;
-        $newStatus = $request->status;
-
-        if ($oldStatus === $newStatus) {
-            return response()->json([
-                'success' => false,
-                'message' => "Volunteer is already {$newStatus}."
-            ], 400);
-        }
-
-        // 🔥 تحديث الـ pivot
-        $campaign->volunteers()->updateExistingPivot($volunteerId, [
-            'status'        => $newStatus,
-            'assigned_date' => $newStatus === 'approved' ? now() : null,
-        ]);
-
-        // 🔥 تحديث الـ count يدويّاً
-        if ($oldStatus !== 'approved' && $newStatus === 'approved') {
-            $campaign->increment('volunteers_joined');
-        } elseif ($oldStatus === 'approved' && $newStatus !== 'approved') {
-            $campaign->decrement('volunteers_joined');
-        }
-
-        $campaign->refresh();
-        $this->checkCampaignCompletion($campaign);
-
+    if ($user->role !== 'admin') {
         return response()->json([
-            'success'           => true,
-            'message'           => "Volunteer {$newStatus} successfully.",
-            'volunteers_joined' => $campaign->volunteers_joined,
-        ], 200);
+            'success' => false,
+            'message' => 'Only admins can update volunteer status.'
+        ], 403);
     }
+
+    $request->validate([
+        'status' => 'required|in:approved,rejected,pending',
+    ]);
+
+    $campaign = Campaign::find($campaignId);
+
+    if (!$campaign) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Campaign not found.'
+        ], 404);
+    }
+
+    $pivot = $campaign->volunteers()->where('volunteer_id', $volunteerId)->first();
+
+    if (!$pivot) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Volunteer not found in this campaign.'
+        ], 404);
+    }
+
+    $oldStatus = $pivot->pivot->status;
+    $newStatus = $request->status;
+
+    if ($oldStatus === $newStatus) {
+        return response()->json([
+            'success' => false,
+            'message' => "Volunteer is already {$newStatus}."
+        ], 400);
+    }
+
+    // 🔥 تحديث الـ pivot
+    $campaign->volunteers()->updateExistingPivot($volunteerId, [
+        'status'        => $newStatus,
+        'assigned_date' => $newStatus === 'approved' ? now() : null,
+    ]);
+
+    // 🔥 تحديث الـ count يدويّاً
+    if ($oldStatus !== 'approved' && $newStatus === 'approved') {
+        $campaign->increment('volunteers_joined');
+    } elseif ($oldStatus === 'approved' && $newStatus !== 'approved') {
+        $campaign->decrement('volunteers_joined');
+    }
+
+    $campaign->refresh();
+    $this->checkCampaignCompletion($campaign);
+
+    // 🔔 إرسال إشعار للمتطوع
+    try {
+        if ($pivot->user) {
+            $statusMessages = [
+                'approved' => 'تم قبولك للتطوع في حملة "' . $campaign->title . '".',
+                'rejected' => 'نأسف، تم رفض طلب تطوعك لحملة "' . $campaign->title . '".',
+                'pending'  => 'طلب تطوعك لحملة "' . $campaign->title . '" قيد المراجعة.',
+            ];
+
+            app(NotificationService::class)->sendToUser(
+                $pivot->user,
+                'تحديث حالة التطوع بالحملة',
+                $statusMessages[$newStatus] ?? 'تم تحديث حالة تطوعك.'
+            );
+        }
+    } catch (\Exception $e) {
+        \Log::warning('Notification failed but volunteer status updated: ' . $e->getMessage());
+    }
+
+    return response()->json([
+        'success'           => true,
+        'message'           => "Volunteer {$newStatus} successfully.",
+        'volunteers_joined' => $campaign->volunteers_joined,
+    ], 200);
+}
 
     /*
     |--------------------------------------------------------------------------
@@ -824,50 +864,66 @@ class VolunteerController extends Controller
     | 15) تعليق متطوع عام (أدمن فقط)
     |--------------------------------------------------------------------------
     */
-    public function suspendGeneralVolunteer(\Illuminate\Http\Request $request, $volunteerId)
-    {
-        $user = Auth::user();
+  public function suspendGeneralVolunteer(\Illuminate\Http\Request $request, $volunteerId)
+{
+    $user = Auth::user();
 
-        if ($user->role !== 'admin') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only admins can suspend volunteers.'
-            ], 403);
-        }
-
-        $volunteer = Volunteer::find($volunteerId);
-
-        if (!$volunteer) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Volunteer not found.'
-            ], 404);
-        }
-
-        if (!$volunteer->general_application) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This record is not a general volunteer application.'
-            ], 400);
-        }
-
-        if ($volunteer->status === 'suspended') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Volunteer is already suspended.'
-            ], 400);
-        }
-
-        $volunteer->update([
-            'status' => 'suspended'
-        ]);
-
+    if ($user->role !== 'admin') {
         return response()->json([
-            'success'   => true,
-            'message'   => 'Volunteer has been suspended successfully.',
-            'volunteer' => $volunteer->load('user:id,first_name,last_name,email,phone', 'governorate:id,name'),
-        ], 200);
+            'success' => false,
+            'message' => 'Only admins can suspend volunteers.'
+        ], 403);
     }
+
+    $volunteer = Volunteer::find($volunteerId);
+
+    if (!$volunteer) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Volunteer not found.'
+        ], 404);
+    }
+
+    if (!$volunteer->general_application) {
+        return response()->json([
+            'success' => false,
+            'message' => 'This record is not a general volunteer application.'
+        ], 400);
+    }
+
+    if ($volunteer->status === 'suspended') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Volunteer is already suspended.'
+        ], 400);
+    }
+
+    $volunteer->update([
+        'status' => 'suspended'
+    ]);
+
+    // 🔔 إرسال إشعار للمتطوع
+    try {
+        if ($volunteer->user) {
+            app(NotificationService::class)->sendToUser(
+                $volunteer->user,
+                'تعليق طلب التطوع',
+                'تم تعليق طلب تطوعك من قبل الإدارة.'
+            );
+        }
+    } catch (\Exception $e) {
+        \Log::warning('Notification failed but volunteer suspended: ' . $e->getMessage());
+    }
+
+    return response()->json([
+        'success'   => true,
+        'message'   => 'Volunteer has been suspended successfully.',
+        'volunteer' => $volunteer->load('user:id,first_name,last_name,email,phone', 'governorate:id,name'),
+    ], 200);
+}
+
+
+
     /**
      * احصل على جميع المتطوعين للحملات (general_application = 0) مع عدد الحملات والساعات
      */

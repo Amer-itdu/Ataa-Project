@@ -718,27 +718,40 @@ class RequestController extends Controller
     | CLOSE REQUEST
     |--------------------------------------------------------------------------
     */
-    public function closeRequest($id)
-    {
-        $req = RequestModel::findOrFail($id);
+public function closeRequest($id)
+{
+    $req = RequestModel::findOrFail($id);
 
-        if ($req->status_request === 'closed') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Request already closed.'
-            ], 400);
-        }
-
-        $req->update([
-            'status_request' => 'closed'
-        ]);
-
+    if ($req->status_request === 'closed') {
         return response()->json([
-            'success' => true,
-            'message' => 'Request closed successfully.',
-            'request_id' => $req->id
-        ]);
+            'success' => false,
+            'message' => 'Request already closed.'
+        ], 400);
     }
+
+    $req->update([
+        'status_request' => 'closed'
+    ]);
+
+    // 🔔 إرسال إشعار لصاحب الطلب
+    try {
+        if ($req->user) {
+            app(NotificationService::class)->sendToUser(
+                $req->user,
+                'تم إغلاق طلبك',
+                'تم إغلاق طلبك بنجاح.'
+            );
+        }
+    } catch (\Exception $e) {
+        Log::warning('Notification failed but request closed: ' . $e->getMessage());
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Request closed successfully.',
+        'request_id' => $req->id
+    ]);
+}
 
     /*
     |--------------------------------------------------------------------------
@@ -814,48 +827,64 @@ class RequestController extends Controller
     }
 
 public function rejectRequest(\Illuminate\Http\Request $request, $requestId)
-    {
-        $user = Auth::user();
+{
+    $user = Auth::user();
 
-        if ($user->role !== 'admin') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only admins can reject beneficiaries.'
-            ], 403);
-        }
-
-        $request->validate([
-            'reason' => 'nullable|string|max:500',
-        ]);
-
-        $requestModel = RequestModel::find($requestId);
-
-        if (!$requestModel) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Request not found.'
-            ], 404);
-        }
-
-        if ($requestModel->status === 'rejected') {
-            return response()->json([
-                'success' => false,
-                'message' => 'This request is already rejected.'
-            ], 400);
-        }
-
-        $requestModel->update([
-            'status'            => 'rejected',
-            'status_request'    => 'closed',
-            'rejection_reason'  => $request->get('reason') ?? null,
-        ]);
-
+    if ($user->role !== 'admin') {
         return response()->json([
-            'success' => true,
-            'message' => 'Beneficiary request rejected successfully.',
-            'request' => $requestModel,
-        ], 200);
+            'success' => false,
+            'message' => 'Only admins can reject beneficiaries.'
+        ], 403);
     }
+
+    $request->validate([
+        'reason' => 'nullable|string|max:500',
+    ]);
+
+    $requestModel = RequestModel::find($requestId);
+
+    if (!$requestModel) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Request not found.'
+        ], 404);
+    }
+
+    if ($requestModel->status === 'rejected') {
+        return response()->json([
+            'success' => false,
+            'message' => 'This request is already rejected.'
+        ], 400);
+    }
+
+    $requestModel->update([
+        'status'            => 'rejected',
+        'status_request'    => 'closed',
+        'rejection_reason'  => $request->get('reason') ?? null,
+    ]);
+
+    // 🔔 إرسال إشعار لصاحب الطلب
+    try {
+        if ($requestModel->user) {
+            $reasonText = $request->get('reason')
+                ? ' السبب: ' . $request->get('reason')
+                : '';
+            app(NotificationService::class)->sendToUser(
+                $requestModel->user,
+                'تم رفض طلبك',
+                'نأسف، تم رفض طلبك.' . $reasonText
+            );
+        }
+    } catch (\Exception $e) {
+        Log::warning('Notification failed but request rejected: ' . $e->getMessage());
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Beneficiary request rejected successfully.',
+        'request' => $requestModel,
+    ], 200);
+}
 
 
 
