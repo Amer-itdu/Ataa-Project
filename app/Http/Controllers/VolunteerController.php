@@ -10,6 +10,8 @@ use App\Models\Volunteer;
 use App\Models\VolunteerHour;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class VolunteerController extends Controller
 {
@@ -686,6 +688,74 @@ class VolunteerController extends Controller
             'entries'     => $entries,
             'total_hours' => $entries->sum('hours'),
         ], 200);
+    }
+
+    public function issueVolunteerCertificate()
+    {
+        $user = Auth::user();
+        $volunteer = $user?->volunteer;
+
+        if (!$volunteer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Volunteer profile not found.',
+            ], 404);
+        }
+
+        $totalHours = (float) $volunteer->totalHours();
+        if ($totalHours < 100) {
+            return response()->json([
+                'success' => false,
+                'message' => 'At least 100 volunteer hours are required.',
+                'total_hours' => $totalHours,
+                'required_hours' => 100,
+            ], 403);
+        }
+
+        if (!$volunteer->certificate_token) {
+            $volunteer->update([
+                'certificate_token' => (string) Str::uuid(),
+                'certificate_issued_at' => now(),
+            ]);
+        }
+
+        $data = [
+            'token' => $volunteer->certificate_token,
+            'certificate_number' => 'VOL-' . str_pad((string) $volunteer->id, 6, '0', STR_PAD_LEFT),
+            'verification_url' => url('/api/volunteers/certificates/' . $volunteer->certificate_token),
+            'volunteer_name' => trim($user->first_name . ' ' . $user->last_name),
+            'total_hours' => $totalHours,
+            'issued_at' => $volunteer->certificate_issued_at?->format('Y-m-d'),
+        ];
+
+        return Pdf::loadView('certificates.volunteer', $data)
+            ->setPaper('a4', 'landscape')
+            ->download('volunteer-certificate-' . $data['certificate_number'] . '.pdf');
+    }
+
+    public function verifyVolunteerCertificate(string $token)
+    {
+        $volunteer = Volunteer::with('user')
+            ->where('certificate_token', $token)
+            ->first();
+
+        if (!$volunteer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Certificate not found or token is invalid.',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'valid' => true,
+            'certificate' => [
+                'volunteer_name' => trim($volunteer->user->first_name . ' ' . $volunteer->user->last_name),
+                'total_hours' => (float) $volunteer->totalHours(),
+                'issued_at' => $volunteer->certificate_issued_at?->format('Y-m-d H:i:s'),
+                'token' => $volunteer->certificate_token,
+            ],
+        ]);
     }
     public function getAllVolunteerApplications(Request $request)
     {

@@ -21,6 +21,8 @@ class Volunteer extends Model
         'agreed_to_terms_at',
         'status',
         'general_application',
+        'certificate_token',
+        'certificate_issued_at',
     ];
 
     protected $casts = [
@@ -28,6 +30,7 @@ class Volunteer extends Model
         'agreed_to_terms'     => 'boolean',
         'agreed_to_terms_at'  => 'datetime',
         'general_application' => 'boolean',
+        'certificate_issued_at' => 'datetime',
     ];
 
     public function user()
