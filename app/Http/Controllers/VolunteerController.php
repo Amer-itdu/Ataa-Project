@@ -582,13 +582,6 @@ class VolunteerController extends Controller
         'assigned_date' => $newStatus === 'approved' ? now() : null,
     ]);
 
-    // 🔥 تحديث الـ count يدويّاً
-    if ($oldStatus !== 'approved' && $newStatus === 'approved') {
-        $campaign->increment('volunteers_joined');
-    } elseif ($oldStatus === 'approved' && $newStatus !== 'approved') {
-        $campaign->decrement('volunteers_joined');
-    }
-
     $campaign->refresh();
     $this->checkCampaignCompletion($campaign);
 
