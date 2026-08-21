@@ -47,11 +47,9 @@ class Orphan extends Model
             return ['success' => false, 'message' => 'Request not found'];
         }
 
-        $requiredAmount = (float) $requestModel->required_amount;
-        $collectedAmount = (float) $requestModel->amount_collected;
-        $sponsorshipAmount = max($requiredAmount - $collectedAmount, 0);
+        $sponsorshipAmount = (float) $requestModel->required_amount;
         if ($sponsorshipAmount <= 0) {
-            return ['success' => false, 'message' => 'This orphan is already fully funded'];
+            $sponsorshipAmount = 1;
         }
 
         $sponsorBalance = $sponsor->getBalance($currency);
@@ -78,20 +76,12 @@ class Orphan extends Model
                 'original_currency' => $currency,
             ]);
 
-            $collected = $collectedAmount + $sponsorshipAmount;
             $this->update([
                 'is_sponsored' => true,
                 'sponsor_id' => $sponsor->id,
                 'sponsorship_amount' => $sponsorshipAmount,
                 'sponsored_at' => now(),
                 'next_monthly_deduction_at' => now()->addMonth(),
-            ]);
-
-            $requestModel->update([
-                'amount_collected' => $collected,
-                'status_request' => $collected >= (float) $requestModel->required_amount
-                    ? 'closed'
-                    : $requestModel->status_request,
             ]);
 
             DB::commit();
@@ -101,10 +91,15 @@ class Orphan extends Model
                 'sponsorship_amount' => $sponsorshipAmount,
                 'next_monthly_deduction' => $this->next_monthly_deduction_at->format('Y-m-d'),
                 'remaining_balance' => $sponsor->getBalance($currency),
+                'orphan_id' => $this->id,
+                'sponsor_id' => $sponsor->id,
             ];
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Sponsorship error: ' . $e->getMessage());
+            Log::error('Sponsorship error: ' . $e->getMessage(), [
+                'orphan_id' => $this->id,
+                'sponsor_id' => $sponsor->id,
+            ]);
             return ['success' => false, 'message' => 'Error during sponsorship: ' . $e->getMessage()];
         }
     }

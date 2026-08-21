@@ -866,7 +866,14 @@ public function closeRequest($id)
         if (!$user) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
         }
-        $orphan = Orphan::findOrFail($orphanId);
+        $orphan = Orphan::find($orphanId);
+        if (!$orphan) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Orphan not found',
+            ], 404);
+        }
+
         $result = $orphan->sponsorOrphan($user);
         return response()->json($result, $result['success'] ? 200 : 400);
     }
@@ -919,6 +926,7 @@ public function closeRequest($id)
 
     public function getSponsoredOrphans()
     {
+        
         $requests = RequestModel::with([
             'beneficiary.governorate',
             'beneficiary.region',
@@ -927,7 +935,6 @@ public function closeRequest($id)
             }
         ])
             ->where('status', 'accepted')
-            ->where('status_request', 'open')
             ->where('request_type', 'orphan')
             ->get()
             ->filter(function ($req) {
