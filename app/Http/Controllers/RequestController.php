@@ -357,6 +357,7 @@ class RequestController extends Controller
             'message' => 'Orphan request created successfully',
             'beneficiary' => $beneficiary,
             'request' => $requestModel,
+            'orphan_id' => $orphan->id,
             'orphan' => $orphan,
         ], 201);
     }
@@ -422,7 +423,11 @@ class RequestController extends Controller
         $requests = RequestModel::with(['beneficiary.governorate', 'beneficiary.region', 'orphan'])
             ->where('status', 'pending')
             ->where('request_type', 'orphan')
-            ->get();
+            ->get()
+            ->map(function ($req) {
+                $req->orphan_id = $req->orphan?->id;
+                return $req;
+            });
 
         return response()->json([
             'status' => 'success',
@@ -500,6 +505,7 @@ class RequestController extends Controller
                 $req->donated_amount = $donated;
                 $req->remaining_amount = $remaining;
                 $req->progress_percentage = $progress;
+                $req->orphan_id = $req->orphan?->id;
 
                 return $req;
             });
@@ -527,6 +533,7 @@ class RequestController extends Controller
                 $req->donated_amount = $donated;
                 $req->remaining_amount = max($required - $donated, 0);
                 $req->progress_percentage = $required > 0 ? round(($donated / $required) * 100, 2) : 0;
+                $req->orphan_id = $target->id;
 
                 return $req;
             });
@@ -677,6 +684,9 @@ class RequestController extends Controller
                     $req->donated_amount = 0;
                     $req->remaining_amount = $req->required_amount;
                     $req->progress_percentage = 0;
+                    if ($req->request_type === 'orphan') {
+                        $req->orphan_id = null;
+                    }
                     return $req;
                 }
 
@@ -686,6 +696,9 @@ class RequestController extends Controller
                 $req->donated_amount = $donated;
                 $req->remaining_amount = max($required - $donated, 0);
                 $req->progress_percentage = $required > 0 ? round(($donated / $required) * 100, 2) : 0;
+                if ($req->request_type === 'orphan') {
+                    $req->orphan_id = $target->id;
+                }
 
                 return $req;
             });
@@ -889,6 +902,7 @@ public function closeRequest($id)
         return response()->json([
             'success' => true,
             'is_sponsored' => true,
+            'orphan_id' => $orphan->id,
             'sponsor_name' => $orphan->sponsor?->name,
             'sponsor_email' => $orphan->sponsor?->email,
             'sponsorship_amount' => $orphan->sponsorship_amount,
@@ -912,6 +926,8 @@ public function closeRequest($id)
             return response()->json(['success' => false, 'message' => 'Orphan is not sponsored'], 400);
         }
 
+        $requestModel = $orphan->request;
+
         $orphan->update([
             'is_sponsored' => false,
             'sponsor_id' => null,
@@ -920,7 +936,16 @@ public function closeRequest($id)
             'next_monthly_deduction_at' => null,
         ]);
 
-        return response()->json(['success' => true, 'message' => 'Sponsorship cancelled successfully'], 200);
+        if ($requestModel && $requestModel->status_request === 'closed'
+            && (float) $requestModel->amount_collected <= 0) {
+            $requestModel->update(['status_request' => 'open']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Sponsorship cancelled successfully',
+            'orphan_id' => $orphan->id,
+        ], 200);
     }
 
 
@@ -948,6 +973,7 @@ public function closeRequest($id)
                 $req->progress_percentage = $required > 0 ? round(($donated / $required) * 100, 2) : 0;
                 $req->sponsor_name = $req->orphan->sponsor?->name;
                 $req->is_sponsored = true;
+                $req->orphan_id = $req->orphan->id;
                 return $req;
             });
 
@@ -973,6 +999,7 @@ public function closeRequest($id)
             ->orderByDesc('sponsored_at')
             ->get()
             ->map(function ($orphan) {
+                $orphan->orphan_id = $orphan->id;
                 $orphan->sponsors_count = $orphan->sponsor_id ? 1 : 0;
                 $orphan->total_sponsorship_amount = $orphan->donations->sum('amount');
 
