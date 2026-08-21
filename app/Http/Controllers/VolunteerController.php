@@ -940,8 +940,7 @@ class VolunteerController extends Controller
     }
     /**
      * احصل على جميع المتطوعين للحملات (general_application = 0) مع عدد الحملات والساعات
-     */
-    public function getAllVolunteersSummary(Request $request)
+     */ public function getAllVolunteersSummary(Request $request)
     {
         $user = Auth::user();
 
@@ -957,47 +956,45 @@ class VolunteerController extends Controller
             'sort_dir' => 'nullable|in:asc,desc',
         ]);
 
-        $query = Volunteer::where('general_application', 0)  // 🔥 المتطوعين للحملات فقط
-            ->where('status', 'approved')  // مقبولين فقط
+        // 🔥 الـ syntax الصحيح
+        $query = Volunteer::where('general_application', 0)
+            ->whereHas('campaigns', function ($q) {
+                $q->where('volunteer_campaign.status', 'approved');  // ✅ الجدول.الحقل
+            })
             ->with([
                 'user:id,first_name,last_name,email,phone',
                 'governorate:id,name',
                 'campaigns' => function ($q) {
-                    $q->wherePivot('status', 'approved');
+                    $q->where('volunteer_campaign.status', 'approved');
                 },
                 'hours'
             ]);
 
-        // جلب البيانات
         $volunteers = $query->get();
 
-        // تنسيق البيانات
         $formattedVolunteers = $volunteers->map(function ($volunteer) {
-            // عدد الحملات المعتمدة
             $campaignsCount = $volunteer->campaigns()
-                ->wherePivot('status', 'approved')
+                ->where('volunteer_campaign.status', 'approved')
                 ->count();
 
-            // إجمالي ساعات التطوع
             $totalHours = $volunteer->totalHours();
 
             return [
-                'volunteer_id' => $volunteer->id,
-                'name' => trim($volunteer->user->first_name . ' ' . $volunteer->user->last_name),
-                'email' => $volunteer->user->email,
-                'phone' => $volunteer->user->phone ?? 'N/A',
-                'gender' => $volunteer->gender,
-                'occupation' => $volunteer->occupation,
-                'governorate' => $volunteer->governorate->name ?? null,
-                'skills' => $volunteer->skills,
-                'status' => $volunteer->status,
+                'volunteer_id'    => $volunteer->id,
+                'name'            => trim($volunteer->user->first_name . ' ' . $volunteer->user->last_name),
+                'email'           => $volunteer->user->email,
+                'phone'           => $volunteer->user->phone ?? 'N/A',
+                'gender'          => $volunteer->gender,
+                'occupation'      => $volunteer->occupation,
+                'governorate'     => $volunteer->governorate->name ?? null,
+                'skills'          => $volunteer->skills,
+                'status'          => $volunteer->status,
                 'campaigns_count' => $campaignsCount,
-                'total_hours' => round($totalHours, 2),
-                'applied_at' => $volunteer->created_at->format('Y-m-d H:i:s'),
+                'total_hours'     => round($totalHours, 2),
+                'applied_at'      => $volunteer->created_at->format('Y-m-d H:i:s'),
             ];
         });
 
-        // الترتيب
         $sortBy  = $request->get('sort_by', 'created_at');
         $sortDir = $request->get('sort_dir', 'desc');
 
@@ -1020,8 +1017,8 @@ class VolunteerController extends Controller
 
         return response()->json([
             'success' => true,
-            'count' => $formattedVolunteers->count(),
-            'data' => $formattedVolunteers->values()
+            'count'   => $formattedVolunteers->count(),
+            'data'    => $formattedVolunteers->values()
         ], 200);
     }
 
