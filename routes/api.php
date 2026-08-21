@@ -151,13 +151,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::get('/getUserById/{id}', [UserController::class, 'getUserById']);
     Route::get('/getAllUsers', [UserController::class, 'getallUsers']);
-    
+
     Route::post('/addBalanceToUser/{userId}', [UserController::class, 'addBalanceToUser']);
     //new 8/19
     Route::get('/getAdminWallet', [UserController::class, 'getAdminWallet']);
     //new
     Route::post('/setRejected/{id}', [UserController::class, 'setRejected']);
     Route::delete('/deleteUser/{id}', [UserController::class, 'deleteUser']);
+    Route::delete('/deleteMyAccount', [UserController::class, 'deleteMyAccount']);
     Route::post('/userprofile/update', [UserController::class, 'updateProfile']);
 });
 Route::middleware(['auth:sanctum'])->group(function () {

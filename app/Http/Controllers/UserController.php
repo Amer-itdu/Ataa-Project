@@ -329,7 +329,7 @@ class UserController extends Controller
             'تم إضافة ' . $request->amount . ' ' . $request->currency . ' إلى محفظتك.'
         );
     } catch (\Exception $e) {
-        \Log::warning('Notification failed but balance added: ' . $e->getMessage());
+        Log::warning('Notification failed but balance added: ' . $e->getMessage());
     }
 
     return response()->json([
@@ -821,5 +821,25 @@ public function getAdminWallet()
         'currency'        => 'USD',
     ], 200);
 }
+
+    public function deleteMyAccount(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Authentication required.',
+            ], 401);
+        }
+
+        $user->tokens()->delete();
+        $user->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Your account has been deleted permanently.',
+        ], 200);
+    }
 
 }

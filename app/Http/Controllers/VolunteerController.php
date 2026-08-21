@@ -11,6 +11,7 @@ use App\Models\VolunteerHour;
 use Illuminate\Http\Request;
 use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Barryvdh\DomPDF\Facade\Pdf;
 
@@ -167,7 +168,7 @@ class VolunteerController extends Controller
             );
         }
     } catch (\Exception $e) {
-        \Log::warning('Notification failed but volunteer application reviewed: ' . $e->getMessage());
+        Log::warning('Notification failed but volunteer application reviewed: ' . $e->getMessage());
     }
 
     return response()->json([
@@ -607,7 +608,7 @@ class VolunteerController extends Controller
             );
         }
     } catch (\Exception $e) {
-        \Log::warning('Notification failed but volunteer status updated: ' . $e->getMessage());
+        Log::warning('Notification failed but volunteer status updated: ' . $e->getMessage());
     }
 
     return response()->json([
@@ -790,7 +791,14 @@ class VolunteerController extends Controller
             'success' => true,
             'valid' => true,
             'certificate' => [
-                'volunteer_name' => trim($volunteer->user->first_name . ' ' . $volunteer->user->last_name),
+                'owner' => $volunteer->user ? [
+                    'id' => $volunteer->user->id,
+                    'name' => trim($volunteer->user->first_name . ' ' . $volunteer->user->last_name),
+                    'email' => $volunteer->user->email,
+                ] : null,
+                'volunteer_name' => $volunteer->user
+                    ? trim($volunteer->user->first_name . ' ' . $volunteer->user->last_name)
+                    : null,
                 'total_hours' => (float) $volunteer->totalHours(),
                 'issued_at' => $volunteer->certificate_issued_at?->format('Y-m-d H:i:s'),
                 'token' => $volunteer->certificate_token,
@@ -982,7 +990,7 @@ class VolunteerController extends Controller
             );
         }
     } catch (\Exception $e) {
-        \Log::warning('Notification failed but volunteer suspended: ' . $e->getMessage());
+        Log::warning('Notification failed but volunteer suspended: ' . $e->getMessage());
     }
 
     return response()->json([
@@ -1028,7 +1036,7 @@ class VolunteerController extends Controller
 
         $volunteers = $query->get();
 
-        $formattedVolunteers = $volunteers->map(function ($volunteer) {
+        $formattedVolunteers = $volunteers->map(function (Volunteer $volunteer) {
             $campaignsCount = $volunteer->campaigns()
                 ->where('volunteer_campaign.status', 'approved')
                 ->count();
