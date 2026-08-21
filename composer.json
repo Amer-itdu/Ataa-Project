@@ -5,7 +5,7 @@
     "description": "The skeleton application for the Laravel framework.",
     "keywords": ["laravel", "framework"],
     "license": "MIT",
-    "require": {
+   "require": {
         "php": "^8.2",
         "kreait/laravel-firebase": "^6.2",
         "barryvdh/laravel-dompdf": "^3.1",

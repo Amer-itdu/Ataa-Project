@@ -11,6 +11,7 @@ use App\Http\Requests\SignInRequest;
 use App\Http\Requests\UpdateProfileRequest;
 use App\Models\Donor;
 use Illuminate\Http\Request;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -291,41 +292,52 @@ class UserController extends Controller
     //_______________________________________________________________________ 
     //_______________________________________________________________________
     // over this function is done
-    public function addBalanceToUser(Request $request, $userId)
-    {
-        $admin = Auth::user();
+   public function addBalanceToUser(Request $request, $userId)
+{
+    $admin = Auth::user();
 
-        if ($admin->role !== 'admin') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only admins can add balance.'
-            ], 403);
-        }
-
-        $request->validate([
-            'currency' => 'required|in:USD,EUR,SAR,AED,EGP,SYP',
-            'amount' => 'required|numeric|min:1',
-        ]);
-
-        $user = User::find($userId);
-
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User not found.'
-            ], 404);
-        }
-
-        // إضافة الرصيد
-        /** @var \App\Models\User $user */
-        $user->addBalance($request->currency, $request->amount);
-
+    if ($admin->role !== 'admin') {
         return response()->json([
-            'success' => true,
-            'message' => 'Balance added successfully.',
-            'balances' => $user->balances
-        ], 200);
+            'success' => false,
+            'message' => 'Only admins can add balance.'
+        ], 403);
     }
+
+    $request->validate([
+        'currency' => 'required|in:USD,EUR,SAR,AED,EGP,SYP',
+        'amount' => 'required|numeric|min:1',
+    ]);
+
+    $user = User::find($userId);
+
+    if (!$user) {
+        return response()->json([
+            'success' => false,
+            'message' => 'User not found.'
+        ], 404);
+    }
+
+    // إضافة الرصيد
+    /** @var \App\Models\User $user */
+    $user->addBalance($request->currency, $request->amount);
+
+    // 🔔 إرسال إشعار للمستخدم
+    try {
+        app(NotificationService::class)->sendToUser(
+            $user,
+            'تم إضافة رصيد',
+            'تم إضافة ' . $request->amount . ' ' . $request->currency . ' إلى محفظتك.'
+        );
+    } catch (\Exception $e) {
+        \Log::warning('Notification failed but balance added: ' . $e->getMessage());
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Balance added successfully.',
+        'balances' => $user->balances
+    ], 200);
+}
 
     public function myDonationsFull()
     {

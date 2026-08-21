@@ -702,27 +702,40 @@ class RequestController extends Controller
     | CLOSE REQUEST
     |--------------------------------------------------------------------------
     */
-    public function closeRequest($id)
-    {
-        $req = RequestModel::findOrFail($id);
+public function closeRequest($id)
+{
+    $req = RequestModel::findOrFail($id);
 
-        if ($req->status_request === 'closed') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Request already closed.'
-            ], 400);
-        }
-
-        $req->update([
-            'status_request' => 'closed'
-        ]);
-
+    if ($req->status_request === 'closed') {
         return response()->json([
-            'success' => true,
-            'message' => 'Request closed successfully.',
-            'request_id' => $req->id
-        ]);
+            'success' => false,
+            'message' => 'Request already closed.'
+        ], 400);
     }
+
+    $req->update([
+        'status_request' => 'closed'
+    ]);
+
+    // 🔔 إرسال إشعار لصاحب الطلب
+    try {
+        if ($req->user) {
+            app(NotificationService::class)->sendToUser(
+                $req->user,
+                'تم إغلاق طلبك',
+                'تم إغلاق طلبك بنجاح.'
+            );
+        }
+    } catch (\Exception $e) {
+        Log::warning('Notification failed but request closed: ' . $e->getMessage());
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Request closed successfully.',
+        'request_id' => $req->id
+    ]);
+}
 
     /*
     |--------------------------------------------------------------------------
@@ -776,20 +789,18 @@ class RequestController extends Controller
 
         $requestModel->update($updateData);
 
-        try {
-            if ($requestModel->user) {
-                app(NotificationService::class)->sendToUser(
-                    $requestModel->user,
-                    'تم قبول طلبك',
-                    'مبروك، تم قبول طلبك بنجاح'
-                );
-            }
-        } catch (\Exception $e) {
-            Log::warning('Notification failed but request accepted: ' . $e->getMessage());
-        }
-
-
-
+       try {
+    if ($requestModel->user) {
+        app(NotificationService::class)->sendToUser(
+            $requestModel->user,
+            'تم قبول طلبك',
+            'مبروك، تم قبول طلبك بنجاح'
+        );
+    }
+} catch (\Exception $e) {
+    Log::warning('Notification failed but request accepted: ' . $e->getMessage());
+}
+    
         return response()->json([
             'success' => true,
             'message' => 'Request accepted and updated successfully.',
