@@ -796,31 +796,25 @@ class RequestController extends Controller
             'request' => $requestModel
         ], 200);
     }
-
     public function rejectRequest(\Illuminate\Http\Request $request, $requestId)
     {
         $user = Auth::user();
-
         if ($user->role !== 'admin') {
             return response()->json([
                 'success' => false,
                 'message' => 'Only admins can reject beneficiaries.'
             ], 403);
         }
-
         $request->validate([
             'reason' => 'nullable|string|max:500',
         ]);
-
         $requestModel = RequestModel::find($requestId);
-
         if (!$requestModel) {
             return response()->json([
                 'success' => false,
                 'message' => 'Request not found.'
             ], 404);
         }
-
         if ($requestModel->status === 'rejected') {
             return response()->json([
                 'success' => false,
@@ -833,23 +827,36 @@ class RequestController extends Controller
             'status_request'    => 'closed',
             'rejection_reason'  => $request->get('reason') ?? null,
         ]);
-
+        // 🔔 إرسال إشعار لصاحب الطلب
+        try {
+            if ($requestModel->user) {
+                $reasonText = $request->get('reason')
+                    ? ' السبب: ' . $request->get('reason')
+                    : '';
+                app(NotificationService::class)->sendToUser(
+                    $requestModel->user,
+                    'تم رفض طلبك',
+                    'نأسف، تم رفض طلبك.' . $reasonText
+                );
+            }
+        } catch (\Exception $e) {
+            Log::warning('Notification failed but request rejected: ' . $e->getMessage());
+        }
         return response()->json([
             'success' => true,
             'message' => 'Beneficiary request rejected successfully.',
             'request' => $requestModel,
         ], 200);
     }
+
     public function sponsorOrphan(\Illuminate\Http\Request $request, $orphanId)
     {
         $user = Auth::user();
         if (!$user) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
         }
-
         $orphan = Orphan::findOrFail($orphanId);
         $result = $orphan->sponsorOrphan($user);
-
         return response()->json($result, $result['success'] ? 200 : 400);
     }
 
@@ -961,5 +968,4 @@ class RequestController extends Controller
             'data' => $orphans,
         ]);
     }
-
 }
