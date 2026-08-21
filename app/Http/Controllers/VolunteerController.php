@@ -11,6 +11,8 @@ use App\Models\VolunteerHour;
 use Illuminate\Http\Request;
 use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class VolunteerController extends Controller
 {
@@ -727,6 +729,74 @@ class VolunteerController extends Controller
             'total_hours' => $entries->sum('hours'),
         ], 200);
     }
+
+    public function issueVolunteerCertificate()
+    {
+        $user = Auth::user();
+        $volunteer = $user?->volunteer;
+
+        if (!$volunteer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Volunteer profile not found.',
+            ], 404);
+        }
+
+        $totalHours = (float) $volunteer->totalHours();
+        if ($totalHours < 100) {
+            return response()->json([
+                'success' => false,
+                'message' => 'At least 100 volunteer hours are required.',
+                'total_hours' => $totalHours,
+                'required_hours' => 100,
+            ], 403);
+        }
+
+        if (!$volunteer->certificate_token) {
+            $volunteer->update([
+                'certificate_token' => (string) Str::uuid(),
+                'certificate_issued_at' => now(),
+            ]);
+        }
+
+        $data = [
+            'token' => $volunteer->certificate_token,
+            'certificate_number' => 'VOL-' . str_pad((string) $volunteer->id, 6, '0', STR_PAD_LEFT),
+            'verification_url' => url('/api/volunteers/certificates/' . $volunteer->certificate_token),
+            'volunteer_name' => trim($user->first_name . ' ' . $user->last_name),
+            'total_hours' => $totalHours,
+            'issued_at' => $volunteer->certificate_issued_at?->format('Y-m-d'),
+        ];
+
+        return Pdf::loadView('certificates.volunteer', $data)
+            ->setPaper('a4', 'landscape')
+            ->download('volunteer-certificate-' . $data['certificate_number'] . '.pdf');
+    }
+
+    public function verifyVolunteerCertificate(string $token)
+    {
+        $volunteer = Volunteer::with('user')
+            ->where('certificate_token', $token)
+            ->first();
+
+        if (!$volunteer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Certificate not found or token is invalid.',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'valid' => true,
+            'certificate' => [
+                'volunteer_name' => trim($volunteer->user->first_name . ' ' . $volunteer->user->last_name),
+                'total_hours' => (float) $volunteer->totalHours(),
+                'issued_at' => $volunteer->certificate_issued_at?->format('Y-m-d H:i:s'),
+                'token' => $volunteer->certificate_token,
+            ],
+        ]);
+    }
     public function getAllVolunteerApplications(Request $request)
     {
         $user = Auth::user();
@@ -926,8 +996,7 @@ class VolunteerController extends Controller
 
     /**
      * احصل على جميع المتطوعين للحملات (general_application = 0) مع عدد الحملات والساعات
-     */
-    public function getAllVolunteersSummary(Request $request)
+     */ public function getAllVolunteersSummary(Request $request)
     {
         $user = Auth::user();
 
@@ -943,47 +1012,45 @@ class VolunteerController extends Controller
             'sort_dir' => 'nullable|in:asc,desc',
         ]);
 
-        $query = Volunteer::where('general_application', 0)  // 🔥 المتطوعين للحملات فقط
-            ->where('status', 'approved')  // مقبولين فقط
+        // 🔥 الـ syntax الصحيح
+        $query = Volunteer::where('general_application', 0)
+            ->whereHas('campaigns', function ($q) {
+                $q->where('volunteer_campaign.status', 'approved');  // ✅ الجدول.الحقل
+            })
             ->with([
                 'user:id,first_name,last_name,email,phone',
                 'governorate:id,name',
                 'campaigns' => function ($q) {
-                    $q->wherePivot('status', 'approved');
+                    $q->where('volunteer_campaign.status', 'approved');
                 },
                 'hours'
             ]);
 
-        // جلب البيانات
         $volunteers = $query->get();
 
-        // تنسيق البيانات
         $formattedVolunteers = $volunteers->map(function ($volunteer) {
-            // عدد الحملات المعتمدة
             $campaignsCount = $volunteer->campaigns()
-                ->wherePivot('status', 'approved')
+                ->where('volunteer_campaign.status', 'approved')
                 ->count();
 
-            // إجمالي ساعات التطوع
             $totalHours = $volunteer->totalHours();
 
             return [
-                'volunteer_id' => $volunteer->id,
-                'name' => trim($volunteer->user->first_name . ' ' . $volunteer->user->last_name),
-                'email' => $volunteer->user->email,
-                'phone' => $volunteer->user->phone ?? 'N/A',
-                'gender' => $volunteer->gender,
-                'occupation' => $volunteer->occupation,
-                'governorate' => $volunteer->governorate->name ?? null,
-                'skills' => $volunteer->skills,
-                'status' => $volunteer->status,
+                'volunteer_id'    => $volunteer->id,
+                'name'            => trim($volunteer->user->first_name . ' ' . $volunteer->user->last_name),
+                'email'           => $volunteer->user->email,
+                'phone'           => $volunteer->user->phone ?? 'N/A',
+                'gender'          => $volunteer->gender,
+                'occupation'      => $volunteer->occupation,
+                'governorate'     => $volunteer->governorate->name ?? null,
+                'skills'          => $volunteer->skills,
+                'status'          => $volunteer->status,
                 'campaigns_count' => $campaignsCount,
-                'total_hours' => round($totalHours, 2),
-                'applied_at' => $volunteer->created_at->format('Y-m-d H:i:s'),
+                'total_hours'     => round($totalHours, 2),
+                'applied_at'      => $volunteer->created_at->format('Y-m-d H:i:s'),
             ];
         });
 
-        // الترتيب
         $sortBy  = $request->get('sort_by', 'created_at');
         $sortDir = $request->get('sort_dir', 'desc');
 
@@ -1006,8 +1073,8 @@ class VolunteerController extends Controller
 
         return response()->json([
             'success' => true,
-            'count' => $formattedVolunteers->count(),
-            'data' => $formattedVolunteers->values()
+            'count'   => $formattedVolunteers->count(),
+            'data'    => $formattedVolunteers->values()
         ], 200);
     }
 

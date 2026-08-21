@@ -8,6 +8,7 @@ use App\Http\Requests\StoreSchoolRequest;
 use App\Http\Requests\StoreUniversityRequest;
 use App\Http\Requests\AcceptRequestRequest;
 use App\Models\Beneficiary;
+use App\Models\Donation;
 use App\Models\Governorate;
 use App\Models\Orphan;
 use App\Models\Patient;
@@ -301,88 +302,64 @@ class RequestController extends Controller
     {
         $user = Auth::user();
         $authorizationResponse = $this->ensureCanCreateRequest($user);
-
         if ($authorizationResponse) {
             return $authorizationResponse;
         }
 
         $isAdmin = $user->role === 'admin';
 
-        // 1) بيانات المستفيد
-        if ($isAdmin) {
+        $beneficiaryData = [
+            'full_name' => $request->full_name,
+            'governorate_id' => $request->governorate_id,
+            'region_id' => $request->region_id,
+            'national_id' => $request->national_id,
+            'email' => null,
+            'phone' => $request->phone,
+        ];
 
-            $beneficiaryData = [
-                'full_name'      => $request->full_name,
-                'governorate_id' => $request->governorate_id,
-                'region_id'      => $request->region_id,
-                'national_id'    => $request->national_id,
-                'email'          => null, // ممنوع
-                'phone'          => $request->phone,
-            ];
+        $requiredAmount = $isAdmin ? $request->required_amount : 0;
+        $status = $isAdmin ? 'accepted' : 'pending';
 
-            $requiredAmount = $request->required_amount;
-            $status = 'accepted';
-        } else {
-
-            $beneficiaryData = [
-                'full_name'      => $request->full_name,
-                'governorate_id' => $request->governorate_id,
-                'region_id'      => $request->region_id,
-                'national_id'    => $request->national_id,
-                'email'          => null, // ممنوع
-                'phone'          => $request->phone,
-            ];
-
-            $requiredAmount = 0;
-            $status = 'pending';
-        }
-
-        // 2) إنشاء أو تحديث المستفيد
         $beneficiary = $this->findOrCreateBeneficiary($beneficiaryData);
 
-        // 3) personal_picture فقط للأدمن
         $personalPicturePath = null;
-
         if ($isAdmin && $request->hasFile('personal_picture')) {
-            $personalPicturePath = $request->file('personal_picture')
-                ->store('personal_pictures', 'public');
+            $personalPicturePath = $request->file('personal_picture')->store('personal_pictures', 'public');
         }
 
-        // 4) إنشاء الطلب
         $requestModel = RequestModel::create([
-            'user_id'          => $user->id,
-            'beneficiary_id'   => $beneficiary->id,
-            'request_type'     => 'orphan',
-            'status'           => $status,
-            'title'            => $isAdmin ? $request->title : null,
-            'description'      => $request->description,
+            'user_id' => $user->id,
+            'beneficiary_id' => $beneficiary->id,
+            'request_type' => 'orphan',
+            'status' => $status,
+            'title' => $isAdmin ? $request->title : null,
+            'description' => $request->description,
             'personal_picture' => $personalPicturePath,
-            'required_amount'  => $requiredAmount,
-            'status_request'   => 'open',
+            'required_amount' => $requiredAmount,
+            'status_request' => 'open',
         ]);
 
-        // 5) رفع الملفات
-        $familyBookletPath = $request->file('family_booklet')
-            ->store('family_booklets', 'public');
+        $familyBookletPath = $request->file('family_booklet')->store('family_booklets', 'public');
+        $deathCertificatePath = $request->file('father_death_certificate')->store('death_certificates', 'public');
 
-        $deathCertificatePath = $request->file('father_death_certificate')
-            ->store('death_certificates', 'public');
-
-        // 6) إنشاء سجل اليتيم
         $orphan = Orphan::create([
-            'request_id'               => $requestModel->id,
-            'family_booklet'           => $familyBookletPath,
+            'request_id' => $requestModel->id,
+            'family_booklet' => $familyBookletPath,
             'father_death_certificate' => $deathCertificatePath,
+            'is_sponsored' => false,
+            'sponsor_id' => null,
+            'sponsorship_amount' => null,
+            'sponsored_at' => null,
+            'next_monthly_deduction_at' => null,
         ]);
 
         return response()->json([
-            'message'     => 'Orphan request created successfully',
+            'message' => 'Orphan request created successfully',
             'beneficiary' => $beneficiary,
-            'request'     => $requestModel,
-            'orphan'      => $orphan,
+            'request' => $requestModel,
+            'orphan' => $orphan,
         ], 201);
     }
-
     /*
 |--------------------------------------------------------------------------
 | HELPER: Find or create Beneficiary by national_id
@@ -496,6 +473,10 @@ class RequestController extends Controller
         ])
             ->where('status', 'accepted')
             ->where('status_request', 'open')
+            ->where('request_type', 'orphan')
+            ->whereHas('orphan', function ($query) {
+                $query->where('is_sponsored', false)->orWhereNull('is_sponsored');
+            })
             ->get()
             ->map(function ($req) {
 
@@ -559,6 +540,9 @@ class RequestController extends Controller
             ->where('status', 'accepted')
             ->where('status_request', 'open')
             ->where('request_type', 'orphan')
+            ->whereHas('orphan', function ($query) {
+                $query->where('is_sponsored', false)->orWhereNull('is_sponsored');
+            })
             ->get()
             ->map(function ($req) {
 
@@ -652,7 +636,7 @@ class RequestController extends Controller
 
         if (! $isAdmin) {
             $query->where('status', 'accepted')
-                  ->where('status_request', 'open');
+                ->where('status_request', 'open');
         }
 
         if ($httpRequest->filled('status_request')) {
@@ -823,59 +807,58 @@ public function closeRequest($id)
             'request' => $requestModel
         ], 200);
     }
-
-public function rejectRequest(\Illuminate\Http\Request $request, $requestId)
-{
-    $user = Auth::user();
-    if ($user->role !== 'admin') {
-        return response()->json([
-            'success' => false,
-            'message' => 'Only admins can reject beneficiaries.'
-        ], 403);
-    }
-    $request->validate([
-        'reason' => 'nullable|string|max:500',
-    ]);
-    $requestModel = RequestModel::find($requestId);
-    if (!$requestModel) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Request not found.'
-        ], 404);
-    }
-    if ($requestModel->status === 'rejected') {
-        return response()->json([
-            'success' => false,
-            'message' => 'This request is already rejected.'
-        ], 400);
-    }
-
-    $requestModel->update([
-        'status'            => 'rejected',
-        'status_request'    => 'closed',
-        'rejection_reason'  => $request->get('reason') ?? null,
-    ]);
-    // 🔔 إرسال إشعار لصاحب الطلب
-    try {
-        if ($requestModel->user) {
-            $reasonText = $request->get('reason')
-                ? ' السبب: ' . $request->get('reason')
-                : '';
-            app(NotificationService::class)->sendToUser(
-                $requestModel->user,
-                'تم رفض طلبك',
-                'نأسف، تم رفض طلبك.' . $reasonText
-            );
+    public function rejectRequest(\Illuminate\Http\Request $request, $requestId)
+    {
+        $user = Auth::user();
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can reject beneficiaries.'
+            ], 403);
         }
-    } catch (\Exception $e) {
-        Log::warning('Notification failed but request rejected: ' . $e->getMessage());
+        $request->validate([
+            'reason' => 'nullable|string|max:500',
+        ]);
+        $requestModel = RequestModel::find($requestId);
+        if (!$requestModel) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Request not found.'
+            ], 404);
+        }
+        if ($requestModel->status === 'rejected') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This request is already rejected.'
+            ], 400);
+        }
+
+        $requestModel->update([
+            'status'            => 'rejected',
+            'status_request'    => 'closed',
+            'rejection_reason'  => $request->get('reason') ?? null,
+        ]);
+        // 🔔 إرسال إشعار لصاحب الطلب
+        try {
+            if ($requestModel->user) {
+                $reasonText = $request->get('reason')
+                    ? ' السبب: ' . $request->get('reason')
+                    : '';
+                app(NotificationService::class)->sendToUser(
+                    $requestModel->user,
+                    'تم رفض طلبك',
+                    'نأسف، تم رفض طلبك.' . $reasonText
+                );
+            }
+        } catch (\Exception $e) {
+            Log::warning('Notification failed but request rejected: ' . $e->getMessage());
+        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Beneficiary request rejected successfully.',
+            'request' => $requestModel,
+        ], 200);
     }
-    return response()->json([
-        'success' => true,
-        'message' => 'Beneficiary request rejected successfully.',
-        'request' => $requestModel,
-    ], 200);
-}
 
     public function sponsorOrphan(\Illuminate\Http\Request $request, $orphanId)
     {
@@ -888,6 +871,112 @@ public function rejectRequest(\Illuminate\Http\Request $request, $requestId)
         return response()->json($result, $result['success'] ? 200 : 400);
     }
 
+    public function sponsorshipInfo($orphanId)
+    {
+        $orphan = Orphan::with(['sponsor', 'request'])->findOrFail($orphanId);
 
-    
+        if (!$orphan->is_sponsored) {
+            return response()->json(['is_sponsored' => false, 'message' => 'This orphan is not sponsored yet'], 200);
+        }
+
+        return response()->json([
+            'success' => true,
+            'is_sponsored' => true,
+            'sponsor_name' => $orphan->sponsor?->name,
+            'sponsor_email' => $orphan->sponsor?->email,
+            'sponsorship_amount' => $orphan->sponsorship_amount,
+            'sponsored_at' => $orphan->sponsored_at?->format('Y-m-d H:i:s'),
+            'next_monthly_deduction' => $orphan->next_monthly_deduction_at?->format('Y-m-d'),
+            'amount_collected' => $orphan->request->amount_collected ?? 0,
+            'remaining_after_sponsorship' => $orphan->getRemainingAmount(),
+        ], 200);
+    }
+
+    public function cancelSponsorship($orphanId)
+    {
+        $user = Auth::user();
+        $orphan = Orphan::findOrFail($orphanId);
+
+        if ($orphan->sponsor_id !== $user->id && $user->role !== 'admin') {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        if (!$orphan->is_sponsored) {
+            return response()->json(['success' => false, 'message' => 'Orphan is not sponsored'], 400);
+        }
+
+        $orphan->update([
+            'is_sponsored' => false,
+            'sponsor_id' => null,
+            'sponsorship_amount' => null,
+            'sponsored_at' => null,
+            'next_monthly_deduction_at' => null,
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'Sponsorship cancelled successfully'], 200);
+    }
+
+
+    public function getSponsoredOrphans()
+    {
+        $requests = RequestModel::with([
+            'beneficiary.governorate',
+            'beneficiary.region',
+            'orphan' => function ($query) {
+                $query->with('sponsor', 'donations');
+            }
+        ])
+            ->where('status', 'accepted')
+            ->where('status_request', 'open')
+            ->where('request_type', 'orphan')
+            ->get()
+            ->filter(function ($req) {
+                return $req->orphan && $req->orphan->is_sponsored;
+            })
+            ->map(function ($req) {
+                $donated = $req->orphan->donations()->sum('amount');
+                $required = $req->required_amount;
+                $req->donated_amount = $donated;
+                $req->remaining_amount = max($required - $donated, 0);
+                $req->progress_percentage = $required > 0 ? round(($donated / $required) * 100, 2) : 0;
+                $req->sponsor_name = $req->orphan->sponsor?->name;
+                $req->is_sponsored = true;
+                return $req;
+            });
+
+        return response()->json([
+            'success' => true,
+            'count' => $requests->count(),
+            'data' => $requests
+        ]);
+    }
+
+    public function getMySponsoredOrphans()
+    {
+        $user = Auth::user();
+
+        $orphans = Orphan::with([
+            'request.beneficiary.governorate',
+            'request.beneficiary.region',
+            'sponsor',
+            'donations',
+        ])
+            ->where('sponsor_id', $user->id)
+            ->where('is_sponsored', true)
+            ->orderByDesc('sponsored_at')
+            ->get()
+            ->map(function ($orphan) {
+                $orphan->sponsors_count = $orphan->sponsor_id ? 1 : 0;
+                $orphan->total_sponsorship_amount = $orphan->donations->sum('amount');
+
+                return $orphan;
+            });
+
+        return response()->json([
+            'success' => true,
+            'sponsors_count' => $orphans->count(),
+            'total_sponsorship_amount' => $orphans->sum('total_sponsorship_amount'),
+            'data' => $orphans,
+        ]);
+    }
 }
